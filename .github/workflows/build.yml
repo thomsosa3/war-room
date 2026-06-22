@@ -1,0 +1,86 @@
+name: Build installers
+
+# Builds the Windows installer (.msi/.exe) and the macOS installer (.dmg) on
+# their native runners. A Windows installer MUST be built on Windows and a macOS
+# .dmg MUST be built on macOS — that's why this uses a matrix of two runners.
+#
+# Triggered on a version tag push (e.g. `git tag v0.1.0 && git push --tags`) and
+# uploads the installers as artifacts + a GitHub Release.
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch: {} # allow manual runs from the Actions tab
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows-latest # -> .msi and .exe
+          - platform: macos-latest # -> .dmg (universal: Intel + Apple Silicon)
+            args: "--target universal-apple-darwin"
+
+    runs-on: ${{ matrix.platform }}
+
+    # The Supabase URL/key and passphrase are injected at build time. Set these
+    # as repository secrets: Settings -> Secrets and variables -> Actions.
+    env:
+      VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+      VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+      VITE_SHARED_PASSPHRASE: ${{ secrets.VITE_SHARED_PASSPHRASE }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - name: Cache Rust
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "./src-tauri -> target"
+
+      # Linux build deps (only needed if you add an ubuntu runner for .AppImage).
+      - name: Install Linux deps
+        if: matrix.platform == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Build the app + installers
+        uses: tauri-apps/tauri-action@v0
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: "War Room ${{ github.ref_name }}"
+          releaseBody: "Download the installer for your OS below."
+          releaseDraft: true
+          prerelease: false
+          args: ${{ matrix.args }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload installers as artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: war-room-${{ matrix.platform }}
+          path: |
+            src-tauri/target/**/release/bundle/**/*.dmg
+            src-tauri/target/**/release/bundle/**/*.msi
+            src-tauri/target/**/release/bundle/**/*-setup.exe
+          if-no-files-found: ignore
