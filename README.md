@@ -85,6 +85,7 @@ create table if not exists tasks (
   splittable boolean not null default true,
   min_chunk_minutes integer not null default 30,
   recurrence jsonb,
+  pinned_start timestamptz, -- manual drag-to-pin override; null = auto-scheduled
   assignee_id uuid references members(id) on delete set null,
   status text not null default 'todo' check (status in ('todo','done')),
   created_at timestamptz not null default now(),

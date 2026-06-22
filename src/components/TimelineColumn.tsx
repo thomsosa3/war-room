@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { isSameDay } from "date-fns";
+import { useEffect, useReducer, useRef, useState } from "react";
+import { format, isSameDay } from "date-fns";
 import type { FixedEvent, Member, ScheduledBlock, Task } from "../lib/types";
 import { blocksOnDay, eventsOnDay } from "../lib/occurrences";
 import { EVENT_COLOR, PRIORITY_COLOR, fmtRange, tint } from "../lib/ui";
@@ -15,10 +15,24 @@ interface Props {
   compact?: boolean;
   upNextTaskId?: string;
   tintBg?: boolean; // member-tint the column background (Both mode)
+  /** Drag-to-pin: drop a block at a new start time on this day. */
+  onMove?: (taskId: string, newStart: Date) => void;
 }
 
 function minutesSinceMidnight(d: Date) {
   return d.getHours() * 60 + d.getMinutes();
+}
+
+const SNAP_MIN = 15;
+
+interface DragState {
+  taskId: string;
+  key: string;
+  durationMin: number;
+  grabOffset: number; // px from block top to pointer
+  startClientY: number;
+  topPx: number; // live top of the dragged block
+  moved: boolean;
 }
 
 export default function TimelineColumn({
@@ -31,8 +45,16 @@ export default function TimelineColumn({
   compact = false,
   upNextTaskId,
   tintBg = false,
+  onMove,
 }: Props) {
   const openEditor = useStore((s) => s.openEditor);
+  const innerRef = useRef<HTMLDivElement>(null);
+  // Drag lives in a ref so the move/up handlers always read the latest value
+  // (state closures can be stale across batched pointer events); `force` just
+  // re-renders the dragged block at its live position.
+  const dragRef = useRef<DragState | null>(null);
+  const [, force] = useReducer((n: number) => n + 1, 0);
+
   const dayBlocks = blocksOnDay(blocks, day);
   const dayEvents = eventsOnDay(events, day);
 
@@ -65,6 +87,70 @@ export default function TimelineColumn({
   const totalHeight = (maxH - minH) * pxPerHour;
   const showNow = isSameDay(day, now);
 
+  // Convert a live top px (within the inner container) to a snapped start time.
+  const snappedMinutes = (topPx: number, durationMin: number) => {
+    const raw = minH * 60 + (topPx / pxPerHour) * 60;
+    const snapped = Math.round(raw / SNAP_MIN) * SNAP_MIN;
+    return Math.max(0, Math.min(snapped, 24 * 60 - durationMin));
+  };
+  const dateAtMinutes = (mins: number) => {
+    const d = new Date(day);
+    d.setHours(0, 0, 0, 0);
+    d.setMinutes(mins);
+    return d;
+  };
+
+  const onPointerDown = (
+    e: React.PointerEvent,
+    b: ScheduledBlock,
+    key: string,
+    s: Date,
+    end: Date
+  ) => {
+    if (!onMove || e.button !== 0) return;
+    try {
+      (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    } catch {
+      /* some pointers/browsers can't capture — drag still works without it */
+    }
+    const innerTop = innerRef.current?.getBoundingClientRect().top ?? 0;
+    const blockTop = topFor(s);
+    dragRef.current = {
+      taskId: b.taskId,
+      key,
+      durationMin: (end.getTime() - s.getTime()) / 60000,
+      grabOffset: e.clientY - (innerTop + blockTop),
+      startClientY: e.clientY,
+      topPx: blockTop,
+      moved: false,
+    };
+    force();
+  };
+
+  const onPointerMove = (e: React.PointerEvent) => {
+    const drag = dragRef.current;
+    if (!drag) return;
+    const innerTop = innerRef.current?.getBoundingClientRect().top ?? 0;
+    drag.topPx = e.clientY - innerTop - drag.grabOffset;
+    drag.moved = drag.moved || Math.abs(e.clientY - drag.startClientY) > 3;
+    force();
+  };
+
+  const onPointerUp = (b: ScheduledBlock, task: Task) => {
+    const drag = dragRef.current;
+    if (!drag) return;
+    if (drag.moved && onMove) {
+      const mins = snappedMinutes(drag.topPx, drag.durationMin);
+      onMove(b.taskId, dateAtMinutes(mins));
+    } else {
+      openEditor({ kind: "task", task });
+    }
+    dragRef.current = null;
+    force();
+  };
+
+  const drag = dragRef.current;
+
   return (
     <div
       className="relative"
@@ -89,7 +175,7 @@ export default function TimelineColumn({
         </div>
       ))}
 
-      <div className="absolute inset-y-0" style={{ left: compact ? 4 : 34, right: 4 }}>
+      <div ref={innerRef} className="absolute inset-y-0" style={{ left: compact ? 4 : 34, right: 4 }}>
         {/* fixed events */}
         {dayEvents.map((occ, i) => (
           <button
@@ -120,28 +206,52 @@ export default function TimelineColumn({
           const color = PRIORITY_COLOR[task.priority];
           const s = new Date(b.start);
           const e = new Date(b.end);
+          const key = `${b.taskId}-${i}`;
           const isUpNext = task.id === upNextTaskId;
+          const isDragging = drag?.key === key;
+          const top = isDragging ? drag!.topPx : topFor(s);
+          const dragMins = isDragging ? snappedMinutes(drag!.topPx, drag!.durationMin) : 0;
           return (
-            <button
-              key={`${b.taskId}-${i}`}
-              onClick={() => openEditor({ kind: "task", task })}
-              className="absolute left-0 right-0 overflow-hidden rounded-md border px-2 py-1 text-left transition"
+            <div
+              key={key}
+              role="button"
+              tabIndex={0}
+              onPointerDown={(ev) => onPointerDown(ev, b, key, s, e)}
+              onPointerMove={onPointerMove}
+              onPointerUp={() => onPointerUp(b, task)}
+              onKeyDown={(ev) => {
+                if (ev.key === "Enter" || ev.key === " ") openEditor({ kind: "task", task });
+              }}
+              className={`absolute left-0 right-0 overflow-hidden rounded-md border px-2 py-1 text-left transition-shadow ${
+                onMove ? "cursor-grab active:cursor-grabbing" : ""
+              }`}
               style={{
-                top: topFor(s),
+                top,
                 height: heightFor(s, e),
                 background: tint(color, 0.22),
                 borderColor: isUpNext ? "#e0913f" : color,
-                boxShadow: isUpNext ? "0 0 0 1px #e0913f" : undefined,
+                borderStyle: b.pinned ? "solid" : "dashed",
+                boxShadow: isDragging
+                  ? "0 6px 16px rgba(0,0,0,0.45)"
+                  : isUpNext
+                  ? "0 0 0 1px #e0913f"
+                  : undefined,
+                opacity: isDragging ? 0.95 : 1,
+                touchAction: "none",
+                zIndex: isDragging ? 20 : undefined,
               }}
               title={`${task.title} · ${fmtRange(b.start, b.end)}${
-                b.scheduledOutsideHours ? " · outside hours" : ""
-              }`}
+                b.pinned ? " · pinned (drag to move, unpin in editor)" : " · drag to pin to a time"
+              }${b.scheduledOutsideHours ? " · outside hours" : ""}`}
             >
               <div className="flex items-center gap-1">
-                <span
-                  className="h-1.5 w-1.5 shrink-0 rounded-full"
-                  style={{ background: color }}
-                />
+                {b.pinned ? (
+                  <span className="shrink-0 text-[10px]" aria-label="pinned">
+                    📌
+                  </span>
+                ) : (
+                  <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: color }} />
+                )}
                 <span
                   className={`truncate text-[12px] font-medium ${
                     task.status === "done" ? "text-ink-faint line-through" : "text-ink"
@@ -157,7 +267,10 @@ export default function TimelineColumn({
               </div>
               {!compact && (
                 <div className="flex items-center gap-1.5 truncate text-[11px] text-ink-soft">
-                  {fmtRange(b.start, b.end)}
+                  {isDragging
+                    ? `→ ${format(dateAtMinutes(dragMins), "h:mm a")}`
+                    : fmtRange(b.start, b.end)}
+                  {b.pinned && !isDragging && <span className="text-pine">pinned</span>}
                   {b.scheduledOutsideHours && (
                     <span className="text-ember" title="Placed outside working hours to hit a hard deadline">
                       ⚡ after hours
@@ -166,7 +279,7 @@ export default function TimelineColumn({
                   {isUpNext && <span className="text-ember">· up next</span>}
                 </div>
               )}
-            </button>
+            </div>
           );
         })}
 

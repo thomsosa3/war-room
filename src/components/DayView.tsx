@@ -8,9 +8,12 @@ export default function DayView() {
   const anchor = new Date(useStore((s) => s.anchor));
   const planNow = useStore((s) => s.planNow);
   const fixedEvents = useStore((s) => s.fixedEvents);
+  const updateTask = useStore((s) => s.updateTask);
   const { byMember, taskMap } = useSchedules();
   const members = useVisibleMembers();
   const now = new Date(planNow);
+  const pinTo = (taskId: string, newStart: Date) =>
+    updateTask(taskId, { pinned_start: newStart.toISOString() });
 
   if (members.length === 0) {
     return <Empty />;
@@ -41,6 +44,7 @@ export default function DayView() {
                 taskMap={taskMap}
                 upNextTaskId={upNext}
                 tintBg={both}
+                onMove={pinTo}
               />
             </div>
           </section>

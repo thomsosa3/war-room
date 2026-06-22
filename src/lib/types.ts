@@ -47,6 +47,12 @@ export interface Task {
   splittable: boolean;
   min_chunk_minutes: number;
   recurrence?: Recurrence | null;
+  /**
+   * Manual override: when set, the task is pinned to this exact start time
+   * (set by dragging a block). The scheduler places it there as one block and
+   * flows auto-scheduled tasks around it. Null = fully auto-scheduled.
+   */
+  pinned_start?: string | null;
   assignee_id?: string | null; // null = shared backlog
   status: TaskStatus;
   created_at: string;
@@ -89,6 +95,8 @@ export interface ScheduledBlock {
   };
   /** True when placed outside working hours to protect a hard deadline. */
   scheduledOutsideHours?: boolean;
+  /** True when this block is a manually pinned (dragged) placement. */
+  pinned?: boolean;
 }
 
 /** A task that could not fully fit before its due date. */

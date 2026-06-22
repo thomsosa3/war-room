@@ -9,10 +9,13 @@ export default function WeekView() {
   const anchor = new Date(useStore((s) => s.anchor));
   const planNow = useStore((s) => s.planNow);
   const fixedEvents = useStore((s) => s.fixedEvents);
+  const updateTask = useStore((s) => s.updateTask);
   const { byMember, taskMap } = useSchedules();
   const members = useVisibleMembers();
   const days = weekDays(anchor);
   const today = new Date(planNow);
+  const pinTo = (taskId: string, newStart: Date) =>
+    updateTask(taskId, { pinned_start: newStart.toISOString() });
 
   return (
     <div className="flex h-full flex-col overflow-y-auto">
@@ -51,6 +54,7 @@ export default function WeekView() {
                       pxPerHour={32}
                       compact
                       tintBg={members.length > 1}
+                      onMove={pinTo}
                     />
                   </div>
                 </div>

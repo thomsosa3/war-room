@@ -226,6 +226,31 @@ describe("schedule", () => {
     expect(JSON.stringify(r1)).toBe(JSON.stringify(r2));
   });
 
+  it("places a pinned task at its exact time and flows auto tasks around it", () => {
+    const pinnedStart = new Date(2024, 0, 2, 13, 0); // Tue 1pm
+    const pinned = task({
+      id: "pinned",
+      estimated_minutes: 60,
+      pinned_start: pinnedStart.toISOString(),
+    });
+    const auto = task({ id: "auto", estimated_minutes: 600, splittable: true });
+    const { blocks } = schedule([pinned, auto], [], workingHours(), settings, NOW);
+
+    const pinnedBlock = blocks.find((b) => b.taskId === "pinned")!;
+    expect(pinnedBlock.pinned).toBe(true);
+    expect(new Date(pinnedBlock.start).getTime()).toBe(pinnedStart.getTime());
+    expect(new Date(pinnedBlock.end).getTime()).toBe(pinnedStart.getTime() + 60 * 60000);
+
+    // No auto block overlaps the pinned 1–2pm window.
+    const ps = pinnedStart.getTime();
+    const pe = ps + 60 * 60000;
+    for (const b of blocks.filter((x) => x.taskId === "auto")) {
+      const s = new Date(b.start).getTime();
+      const e = new Date(b.end).getTime();
+      expect(e <= ps || s >= pe).toBe(true);
+    }
+  });
+
   it("does not schedule shared-backlog (unassigned) tasks", () => {
     const t = task({ assignee_id: null });
     const { blocks } = schedule([t], [], workingHours(), settings, NOW);

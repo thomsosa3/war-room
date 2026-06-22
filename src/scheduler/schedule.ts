@@ -242,6 +242,7 @@ function buildJobs(tasks: Task[], now: number, windowEnd: number): Job[] {
     if (task.status !== "todo") continue;
     if (!task.assignee_id) continue; // shared backlog: not scheduled
     if (task.estimated_minutes <= 0) continue;
+    if (task.pinned_start) continue; // pinned tasks are placed manually, not auto
 
     const taskEarliest = task.earliest_start
       ? Math.max(now, new Date(task.earliest_start).getTime())
@@ -317,10 +318,30 @@ export function schedule(
     day = addDays(day, 1);
   }
 
-  // 2. Fixed-event busy intervals (recurrence expanded).
-  const busy = mergeIntervals(
-    fixedEvents.flatMap((ev) => expandFixedEvent(ev, nowMs, windowEnd))
-  );
+  // 2a. Pinned tasks: manually placed by dragging. They're immovable like fixed
+  // events — emitted as-is and treated as occupied so auto tasks flow around them.
+  const pinnedBlocks: ScheduledBlock[] = [];
+  const pinnedBusy: Interval[] = [];
+  for (const task of tasks) {
+    if (task.status !== "todo" || !task.assignee_id || !task.pinned_start) continue;
+    if (task.estimated_minutes <= 0) continue;
+    const start = new Date(task.pinned_start).getTime();
+    const end = start + task.estimated_minutes * MIN;
+    if (end <= nowDay.getTime() || start >= windowEnd) continue; // out of view
+    pinnedBlocks.push({
+      taskId: task.id,
+      start: new Date(start).toISOString(),
+      end: new Date(end).toISOString(),
+      pinned: true,
+    });
+    pinnedBusy.push({ start, end });
+  }
+
+  // 2b. Fixed-event busy intervals (recurrence expanded) + pinned tasks.
+  const busy = mergeIntervals([
+    ...fixedEvents.flatMap((ev) => expandFixedEvent(ev, nowMs, windowEnd)),
+    ...pinnedBusy,
+  ]);
 
   // 3. Two pools: working-hours free, and outside-hours free (for hard deadlines).
   let workFree = clip(subtractIntervals(workIntervals, busy), nowMs, windowEnd);
@@ -407,6 +428,7 @@ export function schedule(
     }
   }
 
+  outBlocks.push(...pinnedBlocks);
   outBlocks.sort((a, b) => a.start.localeCompare(b.start));
   return { blocks: outBlocks, atRisk };
 }

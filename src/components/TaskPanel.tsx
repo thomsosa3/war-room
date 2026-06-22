@@ -32,6 +32,7 @@ export default function TaskPanel() {
   const [splittable, setSplittable] = useState(existing?.splittable ?? true);
   const [minChunk, setMinChunk] = useState(existing?.min_chunk_minutes ?? defaultChunk);
   const [recurDays, setRecurDays] = useState<Weekday[]>(existing?.recurrence?.days ?? []);
+  const [pinnedStart, setPinnedStart] = useState<string | null>(existing?.pinned_start ?? null);
 
   const dueDisabled = priority === "asap" || deadlineType === "none";
 
@@ -51,6 +52,7 @@ export default function TaskPanel() {
       assignee_id: assignee || null,
       status: existing?.status ?? "todo",
       completed_at: existing?.completed_at ?? null,
+      pinned_start: pinnedStart, // preserve manual pin; cleared via Unpin
     };
     if (isEdit && existing?.id) await updateTask(existing.id, payload);
     else await createTask(payload);
@@ -111,6 +113,26 @@ export default function TaskPanel() {
           placeholder="What needs doing?"
         />
       </Field>
+
+      {pinnedStart && (
+        <div className="mb-3 flex items-center gap-2 rounded-lg border border-pine/40 bg-pine/10 px-3 py-2 text-sm">
+          <span>📌</span>
+          <span className="flex-1 text-ink-soft">
+            Pinned to{" "}
+            <span className="text-ink">{format(new Date(pinnedStart), "EEE MMM d, h:mm a")}</span>
+          </span>
+          <button
+            onClick={async () => {
+              setPinnedStart(null);
+              // Apply immediately (like Delete / Mark done) so it doesn't depend on Save.
+              if (existing?.id) await updateTask(existing.id, { pinned_start: null });
+            }}
+            className="rounded-md border border-ground-line px-2 py-1 text-[12px] text-ink-soft hover:text-ink"
+          >
+            Unpin (auto-schedule)
+          </button>
+        </div>
+      )}
 
       <div className="grid grid-cols-2 gap-3">
         <Field label="Estimate (minutes)">
