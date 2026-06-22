@@ -9,9 +9,11 @@ export default defineConfig({
     port: 1420,
     strictPort: true,
   },
-  // Produce relative asset paths so the bundle works inside the Tauri webview.
   build: {
-    target: "es2021",
+    // es2019 transpiles optional chaining / nullish coalescing / logical
+    // assignment down so the web build also runs on older browsers (e.g. the
+    // Safari/Chrome that macOS 10.12 caps out at). Harmless for the Tauri webview.
+    target: "es2019",
     outDir: "dist",
   },
 });

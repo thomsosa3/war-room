@@ -14,9 +14,13 @@ export default function SettingsPanel() {
   const close = useStore((s) => s.openEditor);
 
   const [tab, setTab] = useState(members[0]?.id ?? "");
-  const [draft, setDraft] = useState<Record<string, Member>>(() =>
-    Object.fromEntries(members.map((m) => [m.id, structuredClone(m)]))
-  );
+  const [draft, setDraft] = useState<Record<string, Member>>(() => {
+    // JSON deep-clone (members are plain data) — avoids structuredClone, which
+    // is missing on the older browsers Mom's macOS 10.12 can run.
+    const out: Record<string, Member> = {};
+    for (const m of members) out[m.id] = JSON.parse(JSON.stringify(m)) as Member;
+    return out;
+  });
   const [horizon, setHorizon] = useState(settings.planning_horizon_days);
   const [chunk, setChunk] = useState(settings.default_chunk_minutes);
 
