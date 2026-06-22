@@ -119,23 +119,26 @@ alter publication supabase_realtime add table fixed_events;
 alter publication supabase_realtime add table settings;
 
 -- ============================================================
--- Access. For a private 2-person tool we leave Row Level
--- Security OFF, so the bundled anon key can read/write. This
--- is "private-by-obscurity" behind the shared passphrase.
+-- Access (Row Level Security).
 --
--- TO HARDEN LATER (recommended if this ever grows): turn RLS
--- ON and add policies. Example below grants the anon role full
--- access only while you decide on a real auth model — replace
--- with per-user rules once you add real accounts.
+-- Supabase's current API keys (publishable `sb_publishable_...`) ALWAYS go
+-- through RLS, so each table needs RLS enabled with a policy or every write is
+-- denied (error 42501). For a private 2-person tool we enable RLS and add one
+-- permissive policy granting the shared key full access — "private-by-obscurity"
+-- behind the shared passphrase.
+--
+-- TO HARDEN LATER (if this ever grows into real accounts): replace the
+-- `using (true) with check (true)` below with per-user rules.
 -- ============================================================
--- alter table members      enable row level security;
--- alter table tasks        enable row level security;
--- alter table fixed_events enable row level security;
--- alter table settings     enable row level security;
--- create policy "anon all" on tasks        for all to anon using (true) with check (true);
--- create policy "anon all" on fixed_events for all to anon using (true) with check (true);
--- create policy "anon all" on members      for all to anon using (true) with check (true);
--- create policy "anon all" on settings     for all to anon using (true) with check (true);
+alter table members      enable row level security;
+alter table tasks        enable row level security;
+alter table fixed_events enable row level security;
+alter table settings     enable row level security;
+
+create policy "war_room_all" on members      for all to anon, authenticated using (true) with check (true);
+create policy "war_room_all" on tasks        for all to anon, authenticated using (true) with check (true);
+create policy "war_room_all" on fixed_events for all to anon, authenticated using (true) with check (true);
+create policy "war_room_all" on settings     for all to anon, authenticated using (true) with check (true);
 ```
 
 The app **seeds the two members and the settings row automatically** on first
@@ -156,9 +159,9 @@ VITE_SHARED_PASSPHRASE=summer2026
 These are inlined into the app at build time. Both copies **must** use the same
 three values to share data and unlock with the same passphrase.
 
-> Security note: the anon key ships inside the installed app. That's acceptable
-> for a private 2-person tool. See the RLS comment in the SQL above to lock it
-> down later.
+> Security note: the publishable/anon key ships inside the installed app. That's
+> acceptable for a private 2-person tool — RLS is on, with a permissive policy.
+> See the RLS section in the SQL above to tighten it with per-user rules later.
 
 ---
 

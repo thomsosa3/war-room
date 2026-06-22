@@ -73,7 +73,10 @@ class SupabaseDb implements Db {
             color: m.color,
             working_hours: defaultWorkingHours(),
           };
-          await sb.from("members").insert(row);
+          // Surface failures (e.g. a missing RLS policy) instead of silently
+          // returning an in-memory row that never persisted.
+          const { error } = await sb.from("members").insert(row);
+          if (error) throw error;
           return row;
         })
       );
