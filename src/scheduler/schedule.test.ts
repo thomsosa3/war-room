@@ -251,6 +251,24 @@ describe("schedule", () => {
     }
   });
 
+  it("places multiple manual blocks for one task across days", () => {
+    const t = task({
+      id: "multi",
+      estimated_minutes: 120,
+      manual_blocks: [
+        { id: "a", start: new Date(2024, 0, 2, 13, 0).toISOString(), minutes: 60 }, // Tue 1pm
+        { id: "b", start: new Date(2024, 0, 4, 15, 0).toISOString(), minutes: 60 }, // Thu 3pm
+      ],
+    });
+    const { blocks } = schedule([t], [], workingHours(), settings, NOW);
+    const mine = blocks.filter((b) => b.taskId === "multi");
+    expect(mine.length).toBe(2);
+    expect(mine.every((b) => b.pinned)).toBe(true);
+    expect(mine[0].isPartialOf?.chunkCount).toBe(2);
+    // distinct ids preserved so each is independently draggable
+    expect(new Set(mine.map((b) => b.manualBlockId)).size).toBe(2);
+  });
+
   it("does not schedule shared-backlog (unassigned) tasks", () => {
     const t = task({ assignee_id: null });
     const { blocks } = schedule([t], [], workingHours(), settings, NOW);

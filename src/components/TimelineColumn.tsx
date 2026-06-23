@@ -16,7 +16,7 @@ interface Props {
   upNextTaskId?: string;
   tintBg?: boolean; // member-tint the column background (Both mode)
   /** Drag-to-pin: drop a block at a new start time, on ANY day's column. */
-  onMove?: (taskId: string, newStart: Date) => void;
+  onMove?: (block: ScheduledBlock, newStart: Date) => void;
 }
 
 function minutesSinceMidnight(d: Date) {
@@ -154,7 +154,7 @@ export default function TimelineColumn({
     const drag = dragRef.current;
     if (!drag) return;
     if (drag.moved && onMove && drag.targetDayKey) {
-      onMove(b.taskId, dateFromKeyMinutes(drag.targetDayKey, drag.targetMin));
+      onMove(b, dateFromKeyMinutes(drag.targetDayKey, drag.targetMin));
     } else {
       openEditor({ kind: "task", task });
     }

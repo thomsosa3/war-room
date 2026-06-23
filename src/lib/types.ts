@@ -40,6 +40,13 @@ export interface SubTask {
   done: boolean;
 }
 
+/** A manually placed time block for a task (one task can have several). */
+export interface ManualBlock {
+  id: string;
+  start: string; // ISO
+  minutes: number;
+}
+
 export interface Task {
   id: string;
   title: string;
@@ -55,11 +62,16 @@ export interface Task {
   min_chunk_minutes: number;
   recurrence?: Recurrence | null;
   /**
-   * Manual override: when set, the task is pinned to this exact start time
-   * (set by dragging a block). The scheduler places it there as one block and
-   * flows auto-scheduled tasks around it. Null = fully auto-scheduled.
+   * Legacy single-pin (kept for back-compat). Superseded by `manual_blocks`;
+   * read as one manual block when manual_blocks is empty.
    */
   pinned_start?: string | null;
+  /**
+   * Manual override: when non-empty, the task is placed exactly at these blocks
+   * (immovable, like fixed events) and NOT auto-scheduled. Lets one task have
+   * several blocks across different days. Null/empty = fully auto-scheduled.
+   */
+  manual_blocks?: ManualBlock[] | null;
   /** Checklist of steps to complete the task. Does not affect scheduling. */
   subtasks?: SubTask[] | null;
   assignee_id?: string | null; // null = shared backlog
@@ -106,6 +118,8 @@ export interface ScheduledBlock {
   scheduledOutsideHours?: boolean;
   /** True when this block is a manually pinned (dragged) placement. */
   pinned?: boolean;
+  /** Which manual block this came from (so dragging moves just this segment). */
+  manualBlockId?: string;
 }
 
 /** A task that could not fully fit before its due date. */

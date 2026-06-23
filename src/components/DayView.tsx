@@ -2,6 +2,8 @@ import { useStore } from "../store/useStore";
 import { useSchedules } from "../store/useSchedules";
 import { useVisibleMembers } from "../store/selectors";
 import { upNextTaskId } from "../lib/occurrences";
+import { applyDragMove } from "../lib/manual";
+import type { ScheduledBlock } from "../lib/types";
 import TimelineColumn from "./TimelineColumn";
 
 export default function DayView() {
@@ -12,8 +14,14 @@ export default function DayView() {
   const { byMember, taskMap } = useSchedules();
   const members = useVisibleMembers();
   const now = new Date(planNow);
-  const pinTo = (taskId: string, newStart: Date) =>
-    updateTask(taskId, { pinned_start: newStart.toISOString() });
+  const pinTo = (block: ScheduledBlock, newStart: Date) => {
+    const task = taskMap[block.taskId];
+    if (!task) return;
+    updateTask(task.id, {
+      manual_blocks: applyDragMove(task, block, newStart.toISOString()),
+      pinned_start: null,
+    });
+  };
 
   if (members.length === 0) {
     return <Empty />;

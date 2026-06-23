@@ -13,12 +13,14 @@ import { useSchedules } from "../store/useSchedules";
 import { useVisibleMembers } from "../store/selectors";
 import type { Member, ScheduledBlock } from "../lib/types";
 import { PRIORITY_COLOR } from "../lib/ui";
+import { applyDragMove } from "../lib/manual";
 
 interface Chip {
   taskId: string;
   title: string;
   member: Member;
   startMin: number; // minutes-since-midnight of the block (to preserve time on move)
+  manualBlockId?: string;
   pinned: boolean;
   color: string;
 }
@@ -53,6 +55,7 @@ export default function MonthView() {
         title: task.title,
         member: m,
         startMin: start.getHours() * 60 + start.getMinutes(),
+        manualBlockId: b.manualBlockId,
         pinned: Boolean((b as ScheduledBlock).pinned),
         color: PRIORITY_COLOR[task.priority],
       });
@@ -64,11 +67,17 @@ export default function MonthView() {
     e.preventDefault();
     const taskId = e.dataTransfer.getData("text/taskid");
     const min = Number(e.dataTransfer.getData("text/min") || 540); // default 9:00
-    if (!taskId) return;
+    const blockId = e.dataTransfer.getData("text/blockid");
+    const task = taskMap[taskId];
+    if (!task) return;
     const start = new Date(day);
     start.setHours(0, 0, 0, 0);
     start.setMinutes(isNaN(min) ? 540 : min);
-    updateTask(taskId, { pinned_start: start.toISOString() });
+    const block = { taskId, manualBlockId: blockId || undefined } as ScheduledBlock;
+    updateTask(task.id, {
+      manual_blocks: applyDragMove(task, block, start.toISOString()),
+      pinned_start: null,
+    });
   };
 
   const openDay = (day: Date) => {
@@ -135,6 +144,7 @@ export default function MonthView() {
                     onDragStart={(e) => {
                       e.dataTransfer.setData("text/taskid", c.taskId);
                       e.dataTransfer.setData("text/min", String(c.startMin));
+                      if (c.manualBlockId) e.dataTransfer.setData("text/blockid", c.manualBlockId);
                       e.dataTransfer.effectAllowed = "move";
                     }}
                     onClick={() => {

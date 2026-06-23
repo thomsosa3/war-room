@@ -3,6 +3,8 @@ import { useStore } from "../store/useStore";
 import { useSchedules } from "../store/useSchedules";
 import { useVisibleMembers } from "../store/selectors";
 import { weekDays } from "../lib/occurrences";
+import { applyDragMove } from "../lib/manual";
+import type { ScheduledBlock } from "../lib/types";
 import TimelineColumn from "./TimelineColumn";
 
 export default function WeekView() {
@@ -14,8 +16,14 @@ export default function WeekView() {
   const members = useVisibleMembers();
   const days = weekDays(anchor);
   const today = new Date(planNow);
-  const pinTo = (taskId: string, newStart: Date) =>
-    updateTask(taskId, { pinned_start: newStart.toISOString() });
+  const pinTo = (block: ScheduledBlock, newStart: Date) => {
+    const task = taskMap[block.taskId];
+    if (!task) return;
+    updateTask(task.id, {
+      manual_blocks: applyDragMove(task, block, newStart.toISOString()),
+      pinned_start: null,
+    });
+  };
 
   return (
     <div className="flex h-full flex-col overflow-y-auto">

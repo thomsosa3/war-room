@@ -14,9 +14,11 @@ export default function AgendaView() {
   const tasks = useStore((s) => s.tasks);
   const openEditor = useStore((s) => s.openEditor);
   const toggleDone = useStore((s) => s.toggleDone);
+  const deleteTask = useStore((s) => s.deleteTask);
   const members = useStore((s) => s.members);
   const { byMember, taskMap, atRiskCount } = useSchedules();
   const visible = useVisibleMembers();
+  const visibleIds = new Set(visible.map((m) => m.id));
 
   // Flatten visible members' blocks, group by calendar date.
   const rows: Row[] = [];
@@ -33,6 +35,9 @@ export default function AgendaView() {
   }
 
   const backlog = tasks.filter((t) => !t.assignee_id && t.status === "todo");
+  const completed = tasks
+    .filter((t) => t.status === "done" && (!t.assignee_id || visibleIds.has(t.assignee_id)))
+    .sort((a, b) => (b.completed_at ?? "").localeCompare(a.completed_at ?? ""));
   const atRisk = visible.flatMap((m) =>
     (byMember[m.id]?.atRisk ?? []).map((a) => ({ ...a, member: m }))
   );
@@ -151,6 +156,54 @@ export default function AgendaView() {
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+        </section>
+
+        {/* Completed */}
+        <section>
+          <SectionHeader title={`Completed (${completed.length})`} />
+          {completed.length === 0 ? (
+            <Empty text="Nothing completed yet. Finished tasks land here instead of vanishing." />
+          ) : (
+            <div className="space-y-1.5">
+              {completed.map((t) => {
+                const member = members.find((m) => m.id === t.assignee_id);
+                return (
+                  <div
+                    key={t.id}
+                    className="flex items-center gap-3 rounded-lg border border-ground-line bg-ground-raised px-3 py-2"
+                  >
+                    <input
+                      type="checkbox"
+                      checked
+                      onChange={() => toggleDone(t)}
+                      className="h-4 w-4 accent-pine"
+                      aria-label={`Reopen ${t.title}`}
+                      title="Reopen (back to todo)"
+                    />
+                    {member && (
+                      <span className="h-2 w-2 rounded-full" style={{ background: member.color }} />
+                    )}
+                    <button
+                      onClick={() => openEditor({ kind: "task", task: t })}
+                      className="flex-1 truncate text-left text-sm text-ink-faint line-through"
+                    >
+                      {t.title}
+                    </button>
+                    <span className="text-[12px] text-ink-faint">
+                      {t.completed_at ? format(new Date(t.completed_at), "MMM d, h:mm a") : ""}
+                    </span>
+                    <button
+                      onClick={() => deleteTask(t.id)}
+                      className="rounded-md border border-ground-line px-2 py-1 text-[11px] text-ink-faint hover:text-ember"
+                      aria-label={`Delete ${t.title}`}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                );
+              })}
             </div>
           )}
         </section>

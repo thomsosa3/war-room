@@ -14,6 +14,7 @@ import type {
   Weekday,
   WorkingHours,
 } from "../lib/types";
+import { resolveManualBlocks } from "../lib/manual";
 
 // ---------------------------------------------------------------------------
 // Scheduling engine — a pure function that mirrors Motion's auto-scheduler.
@@ -242,7 +243,7 @@ function buildJobs(tasks: Task[], now: number, windowEnd: number): Job[] {
     if (task.status !== "todo") continue;
     if (!task.assignee_id) continue; // shared backlog: not scheduled
     if (task.estimated_minutes <= 0) continue;
-    if (task.pinned_start) continue; // pinned tasks are placed manually, not auto
+    if (resolveManualBlocks(task).length) continue; // manual tasks aren't auto-scheduled
 
     const taskEarliest = task.earliest_start
       ? Math.max(now, new Date(task.earliest_start).getTime())
@@ -318,23 +319,33 @@ export function schedule(
     day = addDays(day, 1);
   }
 
-  // 2a. Pinned tasks: manually placed by dragging. They're immovable like fixed
-  // events — emitted as-is and treated as occupied so auto tasks flow around them.
+  // 2a. Manual blocks: placed by dragging / the editor. One task can have several
+  // blocks across days. They're immovable like fixed events — emitted as-is and
+  // treated as occupied so auto tasks flow around them.
   const pinnedBlocks: ScheduledBlock[] = [];
   const pinnedBusy: Interval[] = [];
   for (const task of tasks) {
-    if (task.status !== "todo" || !task.assignee_id || !task.pinned_start) continue;
-    if (task.estimated_minutes <= 0) continue;
-    const start = new Date(task.pinned_start).getTime();
-    const end = start + task.estimated_minutes * MIN;
-    if (end <= nowDay.getTime() || start >= windowEnd) continue; // out of view
-    pinnedBlocks.push({
-      taskId: task.id,
-      start: new Date(start).toISOString(),
-      end: new Date(end).toISOString(),
-      pinned: true,
+    if (task.status !== "todo" || !task.assignee_id) continue;
+    const manuals = resolveManualBlocks(task)
+      .filter((mb) => mb.minutes > 0)
+      .sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime());
+    manuals.forEach((mb, idx) => {
+      const start = new Date(mb.start).getTime();
+      const end = start + mb.minutes * MIN;
+      if (end <= nowDay.getTime() || start >= windowEnd) return; // out of view
+      pinnedBlocks.push({
+        taskId: task.id,
+        start: new Date(start).toISOString(),
+        end: new Date(end).toISOString(),
+        pinned: true,
+        manualBlockId: mb.id,
+        isPartialOf:
+          manuals.length > 1
+            ? { taskId: task.id, chunkIndex: idx, chunkCount: manuals.length }
+            : undefined,
+      });
+      pinnedBusy.push({ start, end });
     });
-    pinnedBusy.push({ start, end });
   }
 
   // 2b. Fixed-event busy intervals (recurrence expanded) + pinned tasks.

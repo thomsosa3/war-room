@@ -3,7 +3,9 @@ import { format } from "date-fns";
 import { useStore } from "../store/useStore";
 import Modal, { Field, inputCls } from "./Modal";
 import { WEEKDAY_LABELS } from "../lib/defaults";
-import type { DeadlineType, Priority, SubTask, Task, Weekday } from "../lib/types";
+import type { DeadlineType, ManualBlock, Priority, SubTask, Task, Weekday } from "../lib/types";
+import { blockUid, resolveManualBlocks } from "../lib/manual";
+import { addDays } from "date-fns";
 
 const uid = () =>
   typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `s-${Date.now()}-${Math.random()}`;
@@ -35,7 +37,11 @@ export default function TaskPanel() {
   const [splittable, setSplittable] = useState(existing?.splittable ?? true);
   const [minChunk, setMinChunk] = useState(existing?.min_chunk_minutes ?? defaultChunk);
   const [recurDays, setRecurDays] = useState<Weekday[]>(existing?.recurrence?.days ?? []);
-  const [pinnedStart, setPinnedStart] = useState<string | null>(existing?.pinned_start ?? null);
+  const [manualBlocks, setManualBlocks] = useState<ManualBlock[]>(() =>
+    existing
+      ? resolveManualBlocks(existing as Task).map((b) => (b.id === "legacy" ? { ...b, id: blockUid() } : b))
+      : []
+  );
   const [subtasks, setSubtasks] = useState<SubTask[]>(existing?.subtasks ?? []);
 
   const dueDisabled = priority === "asap" || deadlineType === "none";
@@ -56,7 +62,10 @@ export default function TaskPanel() {
       assignee_id: assignee || null,
       status: existing?.status ?? "todo",
       completed_at: existing?.completed_at ?? null,
-      pinned_start: pinnedStart, // preserve manual pin; cleared via Unpin
+      pinned_start: null, // superseded by manual_blocks
+      manual_blocks: manualBlocks.length
+        ? manualBlocks.filter((b) => b.minutes > 0).sort((a, b) => a.start.localeCompare(b.start))
+        : null,
       subtasks: subtasks.length ? subtasks.map((s) => ({ ...s, title: s.title.trim() })).filter((s) => s.title) : null,
     };
     if (isEdit && existing?.id) await updateTask(existing.id, payload);
@@ -118,26 +127,6 @@ export default function TaskPanel() {
           placeholder="What needs doing?"
         />
       </Field>
-
-      {pinnedStart && (
-        <div className="mb-3 flex items-center gap-2 rounded-lg border border-pine/40 bg-pine/10 px-3 py-2 text-sm">
-          <span>📌</span>
-          <span className="flex-1 text-ink-soft">
-            Pinned to{" "}
-            <span className="text-ink">{format(new Date(pinnedStart), "EEE MMM d, h:mm a")}</span>
-          </span>
-          <button
-            onClick={async () => {
-              setPinnedStart(null);
-              // Apply immediately (like Delete / Mark done) so it doesn't depend on Save.
-              if (existing?.id) await updateTask(existing.id, { pinned_start: null });
-            }}
-            className="rounded-md border border-ground-line px-2 py-1 text-[12px] text-ink-soft hover:text-ink"
-          >
-            Unpin (auto-schedule)
-          </button>
-        </div>
-      )}
 
       <div className="grid grid-cols-2 gap-3">
         <Field label="Estimate (minutes)">
@@ -254,6 +243,84 @@ export default function TaskPanel() {
           ))}
         </div>
       </Field>
+
+      <div className="mb-3 rounded-lg border border-ground-line bg-ground p-3">
+        <div className="mb-1.5 flex items-center justify-between">
+          <span className="text-[12px] font-medium text-ink-soft">
+            Manual time blocks{manualBlocks.length > 0 ? ` (${manualBlocks.length})` : ""}
+          </span>
+          {manualBlocks.length > 0 && (
+            <button
+              onClick={async () => {
+                setManualBlocks([]);
+                if (existing?.id) await updateTask(existing.id, { manual_blocks: null, pinned_start: null });
+              }}
+              className="text-[11px] text-ink-faint hover:text-ink"
+            >
+              Clear → auto-schedule
+            </button>
+          )}
+        </div>
+        {manualBlocks.length === 0 ? (
+          <p className="text-[11px] text-ink-faint">
+            Auto-scheduled. Add blocks to place this task by hand — e.g. 3 blocks across 3 days — or
+            just drag it on the calendar.
+          </p>
+        ) : (
+          <div className="space-y-1.5">
+            {manualBlocks.map((b, i) => (
+              <div key={b.id} className="flex items-center gap-2">
+                <span className="w-4 shrink-0 text-center text-[11px] text-ink-faint">{i + 1}</span>
+                <input
+                  type="datetime-local"
+                  value={toLocalInput(b.start)}
+                  onChange={(e) =>
+                    setManualBlocks((cur) =>
+                      cur.map((x) => (x.id === b.id ? { ...x, start: fromLocalInput(e.target.value) ?? x.start } : x))
+                    )
+                  }
+                  className={`${inputCls} flex-1`}
+                />
+                <input
+                  type="number"
+                  min={5}
+                  step={5}
+                  value={b.minutes}
+                  onChange={(e) =>
+                    setManualBlocks((cur) =>
+                      cur.map((x) => (x.id === b.id ? { ...x, minutes: Math.max(5, Number(e.target.value)) } : x))
+                    )
+                  }
+                  className={`${inputCls} w-16`}
+                  title="minutes"
+                />
+                <button
+                  onClick={() => setManualBlocks((cur) => cur.filter((x) => x.id !== b.id))}
+                  className="shrink-0 rounded-md border border-ground-line px-2 py-1.5 text-[12px] text-ink-faint hover:text-ember"
+                  aria-label="Remove block"
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
+            <div className="text-[11px] text-ink-faint">
+              {manualBlocks.reduce((a, b) => a + (b.minutes || 0), 0)} min placed / {estimate} min estimate
+            </div>
+          </div>
+        )}
+        <button
+          onClick={() =>
+            setManualBlocks((cur) => {
+              const base = cur.length ? addDays(new Date(cur[cur.length - 1].start), 1) : addDays(new Date(), 1);
+              base.setHours(9, 0, 0, 0);
+              return [...cur, { id: blockUid(), start: base.toISOString(), minutes: Math.min(Math.max(estimate, 5), 60) }];
+            })
+          }
+          className="mt-1.5 rounded-lg border border-ground-line px-3 py-1.5 text-[12px] text-ink-soft hover:text-ink"
+        >
+          + Add block
+        </button>
+      </div>
 
       <div className="mb-3">
         <div className="mb-1 flex items-center justify-between">
