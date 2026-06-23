@@ -34,6 +34,9 @@ jobs:
       VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
       VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
       VITE_SHARED_PASSPHRASE: ${{ secrets.VITE_SHARED_PASSPHRASE }}
+      # Updater signing — tauri-action signs the build and emits latest.json.
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
 
     steps:
       - uses: actions/checkout@v4
@@ -68,8 +71,9 @@ jobs:
         with:
           tagName: ${{ github.ref_name }}
           releaseName: "War Room ${{ github.ref_name }}"
-          releaseBody: "Download the installer for your OS below."
-          releaseDraft: true
+          releaseBody: "Download the installer for your OS below. Existing installs update themselves."
+          # Must be published (not draft) so the updater's `releases/latest` feed resolves.
+          releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
         env:

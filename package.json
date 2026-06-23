@@ -1,7 +1,7 @@
 {
   "name": "war-room",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "description": "Shared auto-scheduling war room — a Motion-style desktop app for two people.",
   "scripts": {
@@ -15,7 +15,9 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.45.4",
     "@tauri-apps/api": "^2.0.2",
+    "@tauri-apps/plugin-process": "^2.3.1",
     "@tauri-apps/plugin-shell": "^2.0.1",
+    "@tauri-apps/plugin-updater": "^2.10.1",
     "date-fns": "^3.6.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",

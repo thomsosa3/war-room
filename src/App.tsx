@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { useStore } from "./store/useStore";
 import { isSupabaseConfigured } from "./lib/supabase";
 import PassphraseGate from "./components/PassphraseGate";
+import UpdateNotifier from "./components/UpdateNotifier";
 import Header from "./components/Header";
 import WarRoomStatus from "./components/WarRoomStatus";
 import DayView from "./components/DayView";
@@ -34,6 +35,7 @@ export default function App() {
 
   return (
     <div className="flex h-full flex-col bg-ground text-ink">
+      <UpdateNotifier />
       <Header />
       <WarRoomStatus />
       <main className="min-h-0 flex-1 overflow-hidden">
