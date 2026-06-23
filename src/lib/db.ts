@@ -1,6 +1,6 @@
 import { supabase, isSupabaseConfigured } from "./supabase";
 import { DEFAULT_SETTINGS, SEED_MEMBERS, defaultWorkingHours } from "./defaults";
-import type { FixedEvent, Member, Settings, Task } from "./types";
+import type { FixedEvent, Member, Project, Settings, Task } from "./types";
 
 // ---------------------------------------------------------------------------
 // Data access layer.
@@ -20,6 +20,7 @@ export interface Snapshot {
   tasks: Task[];
   fixedEvents: FixedEvent[];
   settings: Settings;
+  projects: Project[];
 }
 
 export interface Db {
@@ -33,6 +34,9 @@ export interface Db {
   updateFixedEvent(id: string, patch: Partial<FixedEvent>): Promise<void>;
   deleteFixedEvent(id: string): Promise<void>;
   updateSettings(patch: Partial<Settings>): Promise<void>;
+  createProject(p: Omit<Project, "id" | "created_at">): Promise<void>;
+  updateProject(id: string, patch: Partial<Project>): Promise<void>;
+  deleteProject(id: string): Promise<void>;
   /** Subscribe to changes; returns an unsubscribe fn. */
   subscribe(onChange: () => void): () => void;
 }
@@ -52,15 +56,17 @@ class SupabaseDb implements Db {
 
   async fetchAll(): Promise<Snapshot> {
     const sb = supabase!;
-    const [members, tasks, events, settingsRows] = await Promise.all([
+    const [members, tasks, events, settingsRows, projects] = await Promise.all([
       sb.from("members").select("*").order("name"),
       sb.from("tasks").select("*"),
       sb.from("fixed_events").select("*"),
       sb.from("settings").select("*").limit(1),
+      sb.from("projects").select("*"),
     ]);
     if (members.error) throw members.error;
     if (tasks.error) throw tasks.error;
     if (events.error) throw events.error;
+    if (projects.error) throw projects.error;
 
     let memberList = (members.data as Member[]) ?? [];
     // Seed the two members + settings on first run.
@@ -92,11 +98,25 @@ class SupabaseDb implements Db {
       tasks: (tasks.data as Task[]) ?? [],
       fixedEvents: (events.data as FixedEvent[]) ?? [],
       settings,
+      projects: (projects.data as Project[]) ?? [],
     };
   }
 
   async upsertMember(m: Member) {
     const { error } = await supabase!.from("members").upsert(m);
+    if (error) throw error;
+  }
+  async createProject(p: Omit<Project, "id" | "created_at">) {
+    const row = { ...p, id: uuid(), created_at: new Date().toISOString() };
+    const { error } = await supabase!.from("projects").insert(row);
+    if (error) throw error;
+  }
+  async updateProject(id: string, patch: Partial<Project>) {
+    const { error } = await supabase!.from("projects").update(patch).eq("id", id);
+    if (error) throw error;
+  }
+  async deleteProject(id: string) {
+    const { error } = await supabase!.from("projects").delete().eq("id", id);
     if (error) throw error;
   }
   async createTask(t: Omit<Task, "id" | "created_at">) {
@@ -136,6 +156,7 @@ class SupabaseDb implements Db {
       .on("postgres_changes", { event: "*", schema: "public", table: "fixed_events" }, onChange)
       .on("postgres_changes", { event: "*", schema: "public", table: "members" }, onChange)
       .on("postgres_changes", { event: "*", schema: "public", table: "settings" }, onChange)
+      .on("postgres_changes", { event: "*", schema: "public", table: "projects" }, onChange)
       .subscribe();
     return () => {
       supabase!.removeChannel(channel);
@@ -156,7 +177,9 @@ class LocalDb implements Db {
     const raw = localStorage.getItem(LS_KEY);
     if (raw) {
       try {
-        return JSON.parse(raw) as Snapshot;
+        const s = JSON.parse(raw) as Snapshot;
+        if (!s.projects) s.projects = []; // back-compat for older local data
+        return s;
       } catch {
         /* fall through to seed */
       }
@@ -171,6 +194,7 @@ class LocalDb implements Db {
       tasks: [],
       fixedEvents: [],
       settings: { ...DEFAULT_SETTINGS, id: uuid() },
+      projects: [],
     };
     this.write(seeded, false);
     return seeded;
@@ -224,6 +248,21 @@ class LocalDb implements Db {
   async updateSettings(patch: Partial<Settings>) {
     const s = this.read();
     s.settings = { ...s.settings, ...patch };
+    this.write(s);
+  }
+  async createProject(p: Omit<Project, "id" | "created_at">) {
+    const s = this.read();
+    s.projects.push({ ...p, id: uuid(), created_at: new Date().toISOString() } as Project);
+    this.write(s);
+  }
+  async updateProject(id: string, patch: Partial<Project>) {
+    const s = this.read();
+    s.projects = s.projects.map((p) => (p.id === id ? { ...p, ...patch } : p));
+    this.write(s);
+  }
+  async deleteProject(id: string) {
+    const s = this.read();
+    s.projects = s.projects.filter((p) => p.id !== id);
     this.write(s);
   }
   subscribe(onChange: () => void) {

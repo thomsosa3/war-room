@@ -18,6 +18,8 @@ export default function TaskPanel() {
   const editing = useStore((s) => s.editing);
   const existing = editing?.kind === "task" ? editing.task : null;
   const members = useStore((s) => s.members);
+  const projects = useStore((s) => s.projects);
+  const allTasks = useStore((s) => s.tasks);
   const createTask = useStore((s) => s.createTask);
   const updateTask = useStore((s) => s.updateTask);
   const deleteTask = useStore((s) => s.deleteTask);
@@ -43,6 +45,9 @@ export default function TaskPanel() {
       : []
   );
   const [subtasks, setSubtasks] = useState<SubTask[]>(existing?.subtasks ?? []);
+  const [projectId, setProjectId] = useState<string | "">(existing?.project_id ?? "");
+  const [needsBoth, setNeedsBoth] = useState<boolean>(existing?.needs_both ?? false);
+  const [dependsOn, setDependsOn] = useState<string[]>(existing?.depends_on ?? []);
 
   const dueDisabled = priority === "asap" || deadlineType === "none";
 
@@ -67,6 +72,9 @@ export default function TaskPanel() {
         ? manualBlocks.filter((b) => b.minutes > 0).sort((a, b) => a.start.localeCompare(b.start))
         : null,
       subtasks: subtasks.length ? subtasks.map((s) => ({ ...s, title: s.title.trim() })).filter((s) => s.title) : null,
+      project_id: projectId || null,
+      needs_both: needsBoth,
+      depends_on: dependsOn.length ? dependsOn : null,
     };
     if (isEdit && existing?.id) await updateTask(existing.id, payload);
     else await createTask(payload);
@@ -148,6 +156,29 @@ export default function TaskPanel() {
               </option>
             ))}
           </select>
+        </Field>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Project">
+          <select value={projectId} onChange={(e) => setProjectId(e.target.value)} className={inputCls}>
+            <option value="">No project</option>
+            {projects.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Who works on it">
+          <button
+            onClick={() => setNeedsBoth((v) => !v)}
+            className={`w-full rounded-lg border px-3 py-2 text-sm ${
+              needsBoth ? "border-pine bg-pine/20" : "border-ground-line text-ink-soft"
+            }`}
+          >
+            {needsBoth ? "👥 Both of us (shared time)" : "One person"}
+          </button>
         </Field>
       </div>
 
@@ -242,6 +273,34 @@ export default function TaskPanel() {
             </button>
           ))}
         </div>
+      </Field>
+
+      <Field label="Blocked by — must finish first (build order)">
+        {allTasks.filter((t) => t.id !== existing?.id && t.status === "todo").length === 0 ? (
+          <p className="text-[11px] text-ink-faint">No other tasks yet to depend on.</p>
+        ) : (
+          <div className="flex flex-wrap gap-1">
+            {allTasks
+              .filter((t) => t.id !== existing?.id && t.status === "todo")
+              .map((t) => {
+                const on = dependsOn.includes(t.id);
+                return (
+                  <button
+                    key={t.id}
+                    onClick={() =>
+                      setDependsOn((cur) => (on ? cur.filter((x) => x !== t.id) : [...cur, t.id]))
+                    }
+                    className={`rounded-md border px-2 py-1 text-[12px] ${
+                      on ? "border-pine bg-pine/20 text-ink" : "border-ground-line text-ink-soft hover:text-ink"
+                    }`}
+                  >
+                    {on ? "✓ " : ""}
+                    {t.title}
+                  </button>
+                );
+              })}
+          </div>
+        )}
       </Field>
 
       <div className="mb-3 rounded-lg border border-ground-line bg-ground p-3">

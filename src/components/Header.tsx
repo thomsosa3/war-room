@@ -47,6 +47,9 @@ export default function Header() {
   const members = useStore((s) => s.members);
   const localMemberId = useStore((s) => s.localMemberId);
   const syncMode = useStore((s) => s.syncMode);
+  const projects = useStore((s) => s.projects);
+  const projectFilter = useStore((s) => s.projectFilter);
+  const setProjectFilter = useStore((s) => s.setProjectFilter);
 
   const me: Member | undefined = members.find((m) => m.id === localMemberId) ?? members[0];
   const other: Member | undefined = members.find((m) => m.id !== me?.id);
@@ -68,7 +71,9 @@ export default function Header() {
     f === "me" ? me?.color : f === "other" ? other?.color : undefined;
 
   const title =
-    view === "agenda"
+    view === "projects"
+      ? "Projects"
+      : view === "agenda"
       ? "Agenda"
       : view === "month"
       ? format(anchorDate, "MMMM yyyy")
@@ -123,15 +128,31 @@ export default function Header() {
               { value: "week", label: "Week" },
               { value: "month", label: "Month" },
               { value: "agenda", label: "Agenda" },
+              { value: "projects", label: "Projects" },
             ]}
             value={view}
             onChange={setView}
           />
           <Segmented<Focus> options={focusOptions} value={focus} onChange={setFocus} colorFor={focusColor} />
+          {projects.length > 0 && view !== "projects" && (
+            <select
+              value={projectFilter}
+              onChange={(e) => setProjectFilter(e.target.value)}
+              className="rounded-lg border border-ground-line bg-ground px-2 py-1.5 text-sm text-ink-soft outline-none focus:border-pine"
+              title="Filter to a project"
+            >
+              <option value="all">All projects</option>
+              {projects.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          )}
         </div>
 
         <div className="flex items-center gap-2">
-          {view !== "agenda" && (
+          {view !== "agenda" && view !== "projects" && (
             <>
               <button
                 onClick={() => step(-1)}

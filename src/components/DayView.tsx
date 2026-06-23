@@ -11,9 +11,12 @@ export default function DayView() {
   const planNow = useStore((s) => s.planNow);
   const fixedEvents = useStore((s) => s.fixedEvents);
   const updateTask = useStore((s) => s.updateTask);
-  const { byMember, taskMap } = useSchedules();
+  const projectFilter = useStore((s) => s.projectFilter);
+  const { byMember, taskMap, projectMap } = useSchedules();
   const members = useVisibleMembers();
   const now = new Date(planNow);
+  const inFilter = (taskId: string) =>
+    projectFilter === "all" || taskMap[taskId]?.project_id === projectFilter;
   const pinTo = (block: ScheduledBlock, newStart: Date) => {
     const task = taskMap[block.taskId];
     if (!task) return;
@@ -30,7 +33,7 @@ export default function DayView() {
   return (
     <div className="grid h-full" style={{ gridTemplateColumns: `repeat(${members.length}, 1fr)` }}>
       {members.map((m) => {
-        const blocks = byMember[m.id]?.blocks ?? [];
+        const blocks = (byMember[m.id]?.blocks ?? []).filter((b) => inFilter(b.taskId));
         const events = fixedEvents.filter((e) => e.member_id === m.id);
         const upNext = upNextTaskId(blocks, now);
         const both = members.length > 1;
@@ -50,6 +53,7 @@ export default function DayView() {
                 blocks={blocks}
                 events={events}
                 taskMap={taskMap}
+                projectMap={projectMap}
                 upNextTaskId={upNext}
                 tintBg={both}
                 onMove={pinTo}

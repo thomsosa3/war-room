@@ -12,9 +12,12 @@ export default function WeekView() {
   const planNow = useStore((s) => s.planNow);
   const fixedEvents = useStore((s) => s.fixedEvents);
   const updateTask = useStore((s) => s.updateTask);
-  const { byMember, taskMap } = useSchedules();
+  const projectFilter = useStore((s) => s.projectFilter);
+  const { byMember, taskMap, projectMap } = useSchedules();
   const members = useVisibleMembers();
   const days = weekDays(anchor);
+  const inFilter = (taskId: string) =>
+    projectFilter === "all" || taskMap[taskId]?.project_id === projectFilter;
   const today = new Date(planNow);
   const pinTo = (block: ScheduledBlock, newStart: Date) => {
     const task = taskMap[block.taskId];
@@ -28,7 +31,7 @@ export default function WeekView() {
   return (
     <div className="flex h-full flex-col overflow-y-auto">
       {members.map((m) => {
-        const blocks = byMember[m.id]?.blocks ?? [];
+        const blocks = (byMember[m.id]?.blocks ?? []).filter((b) => inFilter(b.taskId));
         const events = fixedEvents.filter((e) => e.member_id === m.id);
         return (
           <section key={m.id} className="border-b border-ground-line">
@@ -59,6 +62,7 @@ export default function WeekView() {
                       blocks={blocks}
                       events={events}
                       taskMap={taskMap}
+                      projectMap={projectMap}
                       pxPerHour={32}
                       compact
                       tintBg={members.length > 1}

@@ -27,6 +27,25 @@ export interface Member {
   working_hours: WorkingHours;
 }
 
+/** A material/supply line item for a project's shopping list. */
+export interface Material {
+  id: string;
+  name: string;
+  qty?: string | null; // free text, e.g. "12", "2 bags"
+  bought: boolean;
+}
+
+/** A build project that groups tasks (Fence, Garden beds, Tree planting...). */
+export interface Project {
+  id: string;
+  name: string;
+  color: string;
+  due_date?: string | null; // target finish date
+  materials?: Material[] | null;
+  archived: boolean;
+  created_at: string;
+}
+
 export interface Recurrence {
   freq: "weekly";
   /** weekdays this repeats on, 0..6 */
@@ -74,6 +93,12 @@ export interface Task {
   manual_blocks?: ManualBlock[] | null;
   /** Checklist of steps to complete the task. Does not affect scheduling. */
   subtasks?: SubTask[] | null;
+  /** Project this task belongs to (null = no project). */
+  project_id?: string | null;
+  /** Task ids that must finish before this one can be scheduled. */
+  depends_on?: string[] | null;
+  /** True = job needs both members; scheduled into their shared free time. */
+  needs_both?: boolean | null;
   assignee_id?: string | null; // null = shared backlog
   status: TaskStatus;
   created_at: string;
@@ -120,6 +145,8 @@ export interface ScheduledBlock {
   pinned?: boolean;
   /** Which manual block this came from (so dragging moves just this segment). */
   manualBlockId?: string;
+  /** True when this is a shared two-person block (shown on both schedules). */
+  bothTask?: boolean;
 }
 
 /** A task that could not fully fit before its due date. */

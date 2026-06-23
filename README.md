@@ -88,6 +88,9 @@ create table if not exists tasks (
   pinned_start timestamptz, -- legacy single pin (superseded by manual_blocks)
   manual_blocks jsonb,      -- manual placements: [{id,start,minutes}] (several per task)
   subtasks jsonb,           -- checklist of steps: [{id,title,done}]
+  project_id uuid,          -- project this task belongs to (FK added after projects table)
+  depends_on jsonb,         -- task ids that must finish first (build order)
+  needs_both boolean not null default false, -- two-person job (shared time)
   assignee_id uuid references members(id) on delete set null,
   status text not null default 'todo' check (status in ('todo','done')),
   created_at timestamptz not null default now(),
@@ -113,6 +116,20 @@ create table if not exists settings (
   default_chunk_minutes integer not null default 30
 );
 
+-- projects (groups of tasks: Fence, Garden beds, Tree planting) ----
+create table if not exists projects (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  color text not null,
+  due_date timestamptz,
+  materials jsonb, -- [{id,name,qty,bought}]
+  archived boolean not null default false,
+  created_at timestamptz not null default now()
+);
+alter table tasks
+  add constraint tasks_project_fk
+  foreign key (project_id) references projects(id) on delete set null;
+
 -- ============================================================
 -- Realtime: both installed copies get live updates
 -- ============================================================
@@ -120,6 +137,7 @@ alter publication supabase_realtime add table members;
 alter publication supabase_realtime add table tasks;
 alter publication supabase_realtime add table fixed_events;
 alter publication supabase_realtime add table settings;
+alter publication supabase_realtime add table projects;
 
 -- ============================================================
 -- Access (Row Level Security).
@@ -137,11 +155,13 @@ alter table members      enable row level security;
 alter table tasks        enable row level security;
 alter table fixed_events enable row level security;
 alter table settings     enable row level security;
+alter table projects     enable row level security;
 
 create policy "war_room_all" on members      for all to anon, authenticated using (true) with check (true);
 create policy "war_room_all" on tasks        for all to anon, authenticated using (true) with check (true);
 create policy "war_room_all" on fixed_events for all to anon, authenticated using (true) with check (true);
 create policy "war_room_all" on settings     for all to anon, authenticated using (true) with check (true);
+create policy "war_room_all" on projects     for all to anon, authenticated using (true) with check (true);
 ```
 
 The app **seeds the two members and the settings row automatically** on first

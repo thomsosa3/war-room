@@ -1,9 +1,9 @@
 import { create } from "zustand";
 import { db } from "../lib/db";
 import { SHARED_PASSPHRASE } from "../lib/supabase";
-import type { FixedEvent, Member, Settings, Task } from "../lib/types";
+import type { FixedEvent, Member, Project, Settings, Task } from "../lib/types";
 
-export type ViewKind = "day" | "week" | "month" | "agenda";
+export type ViewKind = "day" | "week" | "month" | "agenda" | "projects";
 /** "me" = this device's member, "other" = the other one. */
 export type Focus = "me" | "other" | "both";
 
@@ -17,7 +17,11 @@ interface EditingEvent {
   kind: "event";
   event: Partial<FixedEvent> | null;
 }
-type Editing = EditingTask | EditingEvent | { kind: "settings" } | null;
+interface EditingProject {
+  kind: "project";
+  project: Partial<Project> | null;
+}
+type Editing = EditingTask | EditingEvent | EditingProject | { kind: "settings" } | null;
 
 interface State {
   // gate
@@ -30,12 +34,14 @@ interface State {
   tasks: Task[];
   fixedEvents: FixedEvent[];
   settings: Settings;
+  projects: Project[];
   syncMode: "supabase" | "local";
 
   // identity / view
   localMemberId: string | null;
   view: ViewKind;
   focus: Focus;
+  projectFilter: string | "all"; // filter calendar views to one project
   anchor: string; // ISO date the calendar is centered on
   planNow: number; // ms; bumped to force a re-plan
   editing: Editing;
@@ -47,6 +53,7 @@ interface State {
   setLocalMember: (id: string) => void;
   setView: (v: ViewKind) => void;
   setFocus: (f: Focus) => void;
+  setProjectFilter: (id: string | "all") => void;
   setAnchor: (iso: string) => void;
   replan: () => void;
   openEditor: (e: Editing) => void;
@@ -61,6 +68,9 @@ interface State {
   updateEvent: (id: string, patch: Partial<FixedEvent>) => Promise<void>;
   deleteEvent: (id: string) => Promise<void>;
   saveSettings: (patch: Partial<Settings>) => Promise<void>;
+  createProject: (p: Omit<Project, "id" | "created_at">) => Promise<void>;
+  updateProject: (id: string, patch: Partial<Project>) => Promise<void>;
+  deleteProject: (id: string) => Promise<void>;
 }
 
 const emptySettings: Settings = {
@@ -78,11 +88,13 @@ export const useStore = create<State>((set, get) => ({
   tasks: [],
   fixedEvents: [],
   settings: emptySettings,
+  projects: [],
   syncMode: db.mode,
 
   localMemberId: localStorage.getItem(LOCAL_MEMBER_KEY),
   view: "day",
   focus: "me",
+  projectFilter: "all",
   anchor: new Date().toISOString(),
   planNow: Date.now(),
   editing: null,
@@ -115,6 +127,7 @@ export const useStore = create<State>((set, get) => ({
       tasks: snap.tasks,
       fixedEvents: snap.fixedEvents,
       settings: snap.settings,
+      projects: snap.projects,
       loaded: true,
       planNow: Date.now(),
     });
@@ -134,6 +147,7 @@ export const useStore = create<State>((set, get) => ({
   },
   setView: (view) => set({ view }),
   setFocus: (focus) => set({ focus }),
+  setProjectFilter: (projectFilter) => set({ projectFilter }),
   setAnchor: (anchor) => set({ anchor }),
   replan: () => set({ planNow: Date.now() }),
   openEditor: (editing) => set({ editing }),
@@ -176,6 +190,18 @@ export const useStore = create<State>((set, get) => ({
   },
   saveSettings: async (patch) => {
     await db.updateSettings(patch);
+    await get().refresh();
+  },
+  createProject: async (p) => {
+    await db.createProject(p);
+    await get().refresh();
+  },
+  updateProject: async (id, patch) => {
+    await db.updateProject(id, patch);
+    await get().refresh();
+  },
+  deleteProject: async (id) => {
+    await db.deleteProject(id);
     await get().refresh();
   },
 }));

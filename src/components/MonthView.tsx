@@ -12,7 +12,7 @@ import { useStore } from "../store/useStore";
 import { useSchedules } from "../store/useSchedules";
 import { useVisibleMembers } from "../store/selectors";
 import type { Member, ScheduledBlock } from "../lib/types";
-import { PRIORITY_COLOR } from "../lib/ui";
+import { taskColor } from "../lib/ui";
 import { applyDragMove } from "../lib/manual";
 
 interface Chip {
@@ -32,7 +32,8 @@ export default function MonthView() {
   const setAnchor = useStore((s) => s.setAnchor);
   const openEditor = useStore((s) => s.openEditor);
   const updateTask = useStore((s) => s.updateTask);
-  const { byMember, taskMap } = useSchedules();
+  const projectFilter = useStore((s) => s.projectFilter);
+  const { byMember, taskMap, projectMap } = useSchedules();
   const members = useVisibleMembers();
   const today = new Date(planNow);
 
@@ -44,9 +45,10 @@ export default function MonthView() {
   const chipsByDay = new Map<string, Chip[]>();
   for (const m of members) {
     for (const b of byMember[m.id]?.blocks ?? []) {
-      const key = format(new Date(b.start), "yyyy-MM-dd");
       const task = taskMap[b.taskId];
       if (!task) continue;
+      if (projectFilter !== "all" && task.project_id !== projectFilter) continue;
+      const key = format(new Date(b.start), "yyyy-MM-dd");
       const list = chipsByDay.get(key) ?? [];
       if (list.some((c) => c.taskId === b.taskId && c.member.id === m.id)) continue; // dedupe chunks
       const start = new Date(b.start);
@@ -57,7 +59,7 @@ export default function MonthView() {
         startMin: start.getHours() * 60 + start.getMinutes(),
         manualBlockId: b.manualBlockId,
         pinned: Boolean((b as ScheduledBlock).pinned),
-        color: PRIORITY_COLOR[task.priority],
+        color: taskColor(task, projectMap),
       });
       chipsByDay.set(key, list);
     }

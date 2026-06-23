@@ -1,8 +1,8 @@
 import { useEffect, useReducer, useRef, useState } from "react";
 import { format, isSameDay } from "date-fns";
-import type { FixedEvent, Member, ScheduledBlock, Task } from "../lib/types";
+import type { FixedEvent, Member, Project, ScheduledBlock, Task } from "../lib/types";
 import { blocksOnDay, eventsOnDay } from "../lib/occurrences";
-import { EVENT_COLOR, PRIORITY_COLOR, fmtRange, tint } from "../lib/ui";
+import { EVENT_COLOR, PRIORITY_COLOR, fmtRange, taskColor, tint } from "../lib/ui";
 import { useStore } from "../store/useStore";
 
 interface Props {
@@ -11,6 +11,7 @@ interface Props {
   blocks: ScheduledBlock[];
   events: FixedEvent[];
   taskMap: Record<string, Task>;
+  projectMap?: Record<string, Project>;
   pxPerHour?: number;
   compact?: boolean;
   upNextTaskId?: string;
@@ -69,6 +70,7 @@ export default function TimelineColumn({
   blocks,
   events,
   taskMap,
+  projectMap = {},
   pxPerHour = 56,
   compact = false,
   upNextTaskId,
@@ -220,7 +222,8 @@ export default function TimelineColumn({
         {dayBlocks.map((b, i) => {
           const task = taskMap[b.taskId];
           if (!task) return null;
-          const color = PRIORITY_COLOR[task.priority];
+          const color = taskColor(task, projectMap);
+          const priColor = PRIORITY_COLOR[task.priority];
           const s = new Date(b.start);
           const e = new Date(b.end);
           const key = `${b.taskId}-${i}`;
@@ -262,8 +265,13 @@ export default function TimelineColumn({
                     📌
                   </span>
                 ) : (
-                  <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: color }} />
+                  <span
+                    className="h-1.5 w-1.5 shrink-0 rounded-full"
+                    style={{ background: priColor }}
+                    title={`Priority: ${task.priority}`}
+                  />
                 )}
+                {b.bothTask && <span className="shrink-0 text-[10px]">👥</span>}
                 <span
                   className={`truncate text-[12px] font-medium ${
                     task.status === "done" ? "text-ink-faint line-through" : "text-ink"

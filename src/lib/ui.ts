@@ -1,5 +1,5 @@
 import { format } from "date-fns";
-import type { FixedEventType, Priority } from "./types";
+import type { FixedEventType, Priority, Project, Task } from "./types";
 
 // Priority colors for scheduled task blocks.
 export const PRIORITY_COLOR: Record<Priority, string> = {
@@ -38,6 +38,38 @@ export function fmtDuration(minutes: number): string {
   if (h && m) return `${h}h ${m}m`;
   if (h) return `${h}h`;
   return `${m}m`;
+}
+
+/** A task's display color: its project's color if it has one, else priority. */
+export function taskColor(task: Task, projectMap: Record<string, Project>): string {
+  if (task.project_id && projectMap[task.project_id]) return projectMap[task.project_id].color;
+  return PRIORITY_COLOR[task.priority];
+}
+
+export interface ProjectProgress {
+  doneMinutes: number;
+  totalMinutes: number;
+  doneCount: number;
+  totalCount: number;
+  pct: number; // 0..100 by minutes
+}
+
+export function projectProgress(projectId: string, tasks: Task[]): ProjectProgress {
+  let doneMinutes = 0;
+  let totalMinutes = 0;
+  let doneCount = 0;
+  let totalCount = 0;
+  for (const t of tasks) {
+    if (t.project_id !== projectId) continue;
+    totalCount += 1;
+    totalMinutes += t.estimated_minutes;
+    if (t.status === "done") {
+      doneCount += 1;
+      doneMinutes += t.estimated_minutes;
+    }
+  }
+  const pct = totalMinutes > 0 ? Math.round((doneMinutes / totalMinutes) * 100) : 0;
+  return { doneMinutes, totalMinutes, doneCount, totalCount, pct };
 }
 
 /** Slightly translucent tint of a hex color, for member-tinted backgrounds. */

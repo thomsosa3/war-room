@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { schedule } from "./schedule";
+import { schedule, scheduleAll } from "./schedule";
+import type { Member } from "../lib/types";
 import type {
   FixedEvent,
   Settings,
@@ -273,5 +274,66 @@ describe("schedule", () => {
     const t = task({ assignee_id: null });
     const { blocks } = schedule([t], [], workingHours(), settings, NOW);
     expect(blocks.length).toBe(0);
+  });
+});
+
+describe("scheduleAll (multi-member)", () => {
+  const mems: Member[] = [
+    { id: "m1", name: "A", color: "#111111", working_hours: workingHours() },
+    { id: "m2", name: "B", color: "#222222", working_hours: workingHours() },
+  ];
+  const endMs = (b: { end: string }) => new Date(b.end).getTime();
+  const startMs = (b: { start: string }) => new Date(b.start).getTime();
+
+  it("schedules a dependent task after its blocker finishes (same member)", () => {
+    const a = task({ id: "A", estimated_minutes: 120, assignee_id: "m1" });
+    const b = task({ id: "B", estimated_minutes: 60, assignee_id: "m1", depends_on: ["A"] });
+    const res = scheduleAll([a, b], [], mems, settings, NOW);
+    const aEnd = Math.max(...res["m1"].blocks.filter((x) => x.taskId === "A").map(endMs));
+    const bStart = Math.min(...res["m1"].blocks.filter((x) => x.taskId === "B").map(startMs));
+    expect(bStart).toBeGreaterThanOrEqual(aEnd);
+  });
+
+  it("honors a cross-member dependency (waits for the other person)", () => {
+    const a = task({ id: "A", estimated_minutes: 120, assignee_id: "m1" });
+    const b = task({ id: "B", estimated_minutes: 60, assignee_id: "m2", depends_on: ["A"] });
+    const res = scheduleAll([a, b], [], mems, settings, NOW);
+    const aEnd = Math.max(...res["m1"].blocks.filter((x) => x.taskId === "A").map(endMs));
+    const bStart = Math.min(...res["m2"].blocks.filter((x) => x.taskId === "B").map(startMs));
+    expect(bStart).toBeGreaterThanOrEqual(aEnd);
+  });
+
+  it("places a two-person task on both schedules at the same time", () => {
+    const t = task({ id: "T", estimated_minutes: 60, assignee_id: "m1", needs_both: true });
+    const res = scheduleAll([t], [], mems, settings, NOW);
+    const b1 = res["m1"].blocks.filter((x) => x.taskId === "T");
+    const b2 = res["m2"].blocks.filter((x) => x.taskId === "T");
+    expect(b1.length).toBe(1);
+    expect(b2.length).toBe(1);
+    expect(b1[0].start).toBe(b2[0].start);
+    expect(b1[0].bothTask).toBe(true);
+  });
+
+  it("a two-person task avoids time when one member is busy", () => {
+    // m2 is busy all of Tuesday; the joint task should not land on Tuesday.
+    const ev = {
+      id: "e",
+      member_id: "m2",
+      title: "busy",
+      start_ts: new Date(2024, 0, 2, 9, 0).toISOString(),
+      end_ts: new Date(2024, 0, 2, 17, 0).toISOString(),
+      type: "work" as const,
+    };
+    const t = task({
+      id: "T",
+      estimated_minutes: 60,
+      assignee_id: "m1",
+      needs_both: true,
+      earliest_start: new Date(2024, 0, 2, 9, 0).toISOString(), // not before Tue 9am
+    });
+    const res = scheduleAll([t], [ev], mems, settings, NOW);
+    const b = res["m1"].blocks.find((x) => x.taskId === "T")!;
+    // Tue is blocked for m2, so the joint block must be Wed or later.
+    expect(new Date(b.start).getDate()).toBeGreaterThanOrEqual(3);
   });
 });

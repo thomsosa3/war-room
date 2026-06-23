@@ -9,8 +9,10 @@ import DayView from "./components/DayView";
 import WeekView from "./components/WeekView";
 import MonthView from "./components/MonthView";
 import AgendaView from "./components/AgendaView";
+import ProjectsView from "./components/ProjectsView";
 import TaskPanel from "./components/TaskPanel";
 import FixedEventForm from "./components/FixedEventForm";
+import ProjectPanel from "./components/ProjectPanel";
 import SettingsPanel from "./components/SettingsPanel";
 
 export default function App() {
@@ -44,10 +46,12 @@ export default function App() {
         {view === "week" && <WeekView />}
         {view === "month" && <MonthView />}
         {view === "agenda" && <AgendaView />}
+        {view === "projects" && <ProjectsView />}
       </main>
 
       {editing?.kind === "task" && <TaskPanel />}
       {editing?.kind === "event" && <FixedEventForm />}
+      {editing?.kind === "project" && <ProjectPanel />}
       {editing?.kind === "settings" && <SettingsPanel />}
     </div>
   );
