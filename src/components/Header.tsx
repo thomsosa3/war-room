@@ -1,4 +1,4 @@
-import { addDays, addWeeks, format } from "date-fns";
+import { addDays, addMonths, addWeeks, format } from "date-fns";
 import { useStore, type Focus, type ViewKind } from "../store/useStore";
 import type { Member } from "../lib/types";
 
@@ -54,7 +54,8 @@ export default function Header() {
   const anchorDate = new Date(anchor);
 
   const step = (dir: number) => {
-    if (view === "week") setAnchor(addWeeks(anchorDate, dir).toISOString());
+    if (view === "month") setAnchor(addMonths(anchorDate, dir).toISOString());
+    else if (view === "week") setAnchor(addWeeks(anchorDate, dir).toISOString());
     else setAnchor(addDays(anchorDate, dir).toISOString());
   };
 
@@ -69,6 +70,8 @@ export default function Header() {
   const title =
     view === "agenda"
       ? "Agenda"
+      : view === "month"
+      ? format(anchorDate, "MMMM yyyy")
       : view === "week"
       ? `Week of ${format(anchorDate, "MMM d, yyyy")}`
       : format(anchorDate, "EEEE, MMM d, yyyy");
@@ -118,6 +121,7 @@ export default function Header() {
             options={[
               { value: "day", label: "Day" },
               { value: "week", label: "Week" },
+              { value: "month", label: "Month" },
               { value: "agenda", label: "Agenda" },
             ]}
             value={view}

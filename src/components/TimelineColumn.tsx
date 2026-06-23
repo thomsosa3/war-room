@@ -15,7 +15,7 @@ interface Props {
   compact?: boolean;
   upNextTaskId?: string;
   tintBg?: boolean; // member-tint the column background (Both mode)
-  /** Drag-to-pin: drop a block at a new start time on this day. */
+  /** Drag-to-pin: drop a block at a new start time, on ANY day's column. */
   onMove?: (taskId: string, newStart: Date) => void;
 }
 
@@ -28,11 +28,39 @@ const SNAP_MIN = 15;
 interface DragState {
   taskId: string;
   key: string;
+  title: string;
   durationMin: number;
   grabOffset: number; // px from block top to pointer
   startClientY: number;
-  topPx: number; // live top of the dragged block
+  clientX: number;
+  clientY: number;
+  // resolved drop target (from whichever day-column the cursor is over)
+  targetDayKey: string | null; // "yyyy-MM-dd"
+  targetMin: number;
   moved: boolean;
+}
+
+/** Resolve which day-column + minute the cursor is over, via DOM hit-testing. */
+function resolveDrop(clientX: number, clientY: number, grabOffset: number, durationMin: number) {
+  const el = document.elementFromPoint(clientX, clientY);
+  const col = el?.closest("[data-daycol]") as HTMLElement | null;
+  if (!col) return null;
+  const rect = col.getBoundingClientRect();
+  const minH = Number(col.getAttribute("data-minh") || 0);
+  const pxph = Number(col.getAttribute("data-pxph") || 56);
+  const dayKey = col.getAttribute("data-day");
+  if (!dayKey) return null;
+  const blockTopY = clientY - grabOffset;
+  const raw = minH * 60 + ((blockTopY - rect.top) / pxph) * 60;
+  const snapped = Math.max(0, Math.min(Math.round(raw / SNAP_MIN) * SNAP_MIN, 24 * 60 - durationMin));
+  return { targetDayKey: dayKey, targetMin: snapped };
+}
+
+function dateFromKeyMinutes(dayKey: string, mins: number) {
+  const [y, m, d] = dayKey.split("-").map(Number);
+  const date = new Date(y, m - 1, d, 0, 0, 0, 0);
+  date.setMinutes(mins);
+  return date;
 }
 
 export default function TimelineColumn({
@@ -48,10 +76,6 @@ export default function TimelineColumn({
   onMove,
 }: Props) {
   const openEditor = useStore((s) => s.openEditor);
-  const innerRef = useRef<HTMLDivElement>(null);
-  // Drag lives in a ref so the move/up handlers always read the latest value
-  // (state closures can be stale across batched pointer events); `force` just
-  // re-renders the dragged block at its live position.
   const dragRef = useRef<DragState | null>(null);
   const [, force] = useReducer((n: number) => n + 1, 0);
 
@@ -86,42 +110,27 @@ export default function TimelineColumn({
   const hours = Array.from({ length: maxH - minH }, (_, i) => minH + i);
   const totalHeight = (maxH - minH) * pxPerHour;
   const showNow = isSameDay(day, now);
+  const dayKey = format(day, "yyyy-MM-dd");
 
-  // Convert a live top px (within the inner container) to a snapped start time.
-  const snappedMinutes = (topPx: number, durationMin: number) => {
-    const raw = minH * 60 + (topPx / pxPerHour) * 60;
-    const snapped = Math.round(raw / SNAP_MIN) * SNAP_MIN;
-    return Math.max(0, Math.min(snapped, 24 * 60 - durationMin));
-  };
-  const dateAtMinutes = (mins: number) => {
-    const d = new Date(day);
-    d.setHours(0, 0, 0, 0);
-    d.setMinutes(mins);
-    return d;
-  };
-
-  const onPointerDown = (
-    e: React.PointerEvent,
-    b: ScheduledBlock,
-    key: string,
-    s: Date,
-    end: Date
-  ) => {
+  const onPointerDown = (e: React.PointerEvent, b: ScheduledBlock, key: string, s: Date, end: Date, title: string) => {
     if (!onMove || e.button !== 0) return;
     try {
       (e.target as HTMLElement).setPointerCapture(e.pointerId);
     } catch {
-      /* some pointers/browsers can't capture — drag still works without it */
+      /* capture not available — drag still works */
     }
-    const innerTop = innerRef.current?.getBoundingClientRect().top ?? 0;
-    const blockTop = topFor(s);
+    const blockTopClient = e.currentTarget.getBoundingClientRect().top;
     dragRef.current = {
       taskId: b.taskId,
       key,
+      title,
       durationMin: (end.getTime() - s.getTime()) / 60000,
-      grabOffset: e.clientY - (innerTop + blockTop),
+      grabOffset: e.clientY - blockTopClient,
       startClientY: e.clientY,
-      topPx: blockTop,
+      clientX: e.clientX,
+      clientY: e.clientY,
+      targetDayKey: dayKey,
+      targetMin: minutesSinceMidnight(s),
       moved: false,
     };
     force();
@@ -130,18 +139,22 @@ export default function TimelineColumn({
   const onPointerMove = (e: React.PointerEvent) => {
     const drag = dragRef.current;
     if (!drag) return;
-    const innerTop = innerRef.current?.getBoundingClientRect().top ?? 0;
-    drag.topPx = e.clientY - innerTop - drag.grabOffset;
+    drag.clientX = e.clientX;
+    drag.clientY = e.clientY;
     drag.moved = drag.moved || Math.abs(e.clientY - drag.startClientY) > 3;
+    const t = resolveDrop(e.clientX, e.clientY, drag.grabOffset, drag.durationMin);
+    if (t) {
+      drag.targetDayKey = t.targetDayKey;
+      drag.targetMin = t.targetMin;
+    }
     force();
   };
 
   const onPointerUp = (b: ScheduledBlock, task: Task) => {
     const drag = dragRef.current;
     if (!drag) return;
-    if (drag.moved && onMove) {
-      const mins = snappedMinutes(drag.topPx, drag.durationMin);
-      onMove(b.taskId, dateAtMinutes(mins));
+    if (drag.moved && onMove && drag.targetDayKey) {
+      onMove(b.taskId, dateFromKeyMinutes(drag.targetDayKey, drag.targetMin));
     } else {
       openEditor({ kind: "task", task });
     }
@@ -154,6 +167,10 @@ export default function TimelineColumn({
   return (
     <div
       className="relative"
+      data-daycol=""
+      data-day={dayKey}
+      data-minh={minH}
+      data-pxph={pxPerHour}
       style={{
         height: totalHeight,
         background: tintBg ? tint(member.color, 0.05) : undefined,
@@ -175,7 +192,7 @@ export default function TimelineColumn({
         </div>
       ))}
 
-      <div ref={innerRef} className="absolute inset-y-0" style={{ left: compact ? 4 : 34, right: 4 }}>
+      <div className="absolute inset-y-0" style={{ left: compact ? 4 : 34, right: 4 }}>
         {/* fixed events */}
         {dayEvents.map((occ, i) => (
           <button
@@ -209,14 +226,14 @@ export default function TimelineColumn({
           const key = `${b.taskId}-${i}`;
           const isUpNext = task.id === upNextTaskId;
           const isDragging = drag?.key === key;
-          const top = isDragging ? drag!.topPx : topFor(s);
-          const dragMins = isDragging ? snappedMinutes(drag!.topPx, drag!.durationMin) : 0;
+          const steps = task.subtasks ?? [];
+          const doneSteps = steps.filter((x) => x.done).length;
           return (
             <div
               key={key}
               role="button"
               tabIndex={0}
-              onPointerDown={(ev) => onPointerDown(ev, b, key, s, e)}
+              onPointerDown={(ev) => onPointerDown(ev, b, key, s, e, task.title)}
               onPointerMove={onPointerMove}
               onPointerUp={() => onPointerUp(b, task)}
               onKeyDown={(ev) => {
@@ -226,19 +243,14 @@ export default function TimelineColumn({
                 onMove ? "cursor-grab active:cursor-grabbing" : ""
               }`}
               style={{
-                top,
+                top: topFor(s),
                 height: heightFor(s, e),
                 background: tint(color, 0.22),
                 borderColor: isUpNext ? "#e0913f" : color,
                 borderStyle: b.pinned ? "solid" : "dashed",
-                boxShadow: isDragging
-                  ? "0 6px 16px rgba(0,0,0,0.45)"
-                  : isUpNext
-                  ? "0 0 0 1px #e0913f"
-                  : undefined,
-                opacity: isDragging ? 0.95 : 1,
+                boxShadow: isUpNext ? "0 0 0 1px #e0913f" : undefined,
+                opacity: isDragging ? 0.35 : 1,
                 touchAction: "none",
-                zIndex: isDragging ? 20 : undefined,
               }}
               title={`${task.title} · ${fmtRange(b.start, b.end)}${
                 b.pinned ? " · pinned (drag to move, unpin in editor)" : " · drag to pin to a time"
@@ -259,6 +271,11 @@ export default function TimelineColumn({
                 >
                   {task.title}
                 </span>
+                {steps.length > 0 && (
+                  <span className="ml-auto shrink-0 text-[10px] text-ink-faint" title="Steps done">
+                    ☑ {doneSteps}/{steps.length}
+                  </span>
+                )}
                 {b.isPartialOf && (
                   <span className="ml-auto shrink-0 text-[10px] text-ink-faint">
                     {b.isPartialOf.chunkIndex + 1}/{b.isPartialOf.chunkCount}
@@ -267,10 +284,8 @@ export default function TimelineColumn({
               </div>
               {!compact && (
                 <div className="flex items-center gap-1.5 truncate text-[11px] text-ink-soft">
-                  {isDragging
-                    ? `→ ${format(dateAtMinutes(dragMins), "h:mm a")}`
-                    : fmtRange(b.start, b.end)}
-                  {b.pinned && !isDragging && <span className="text-pine">pinned</span>}
+                  {fmtRange(b.start, b.end)}
+                  {b.pinned && <span className="text-pine">pinned</span>}
                   {b.scheduledOutsideHours && (
                     <span className="text-ember" title="Placed outside working hours to hit a hard deadline">
                       ⚡ after hours
@@ -305,6 +320,21 @@ export default function TimelineColumn({
               </span>
             )}
           </div>
+        </div>
+      )}
+
+      {/* floating drag ghost — follows the cursor across day columns */}
+      {drag && drag.moved && (
+        <div
+          className="pointer-events-none fixed z-50 rounded-md border border-ember bg-ground-panel px-2 py-1 text-[12px] shadow-2xl"
+          style={{ left: drag.clientX + 12, top: drag.clientY + 12 }}
+        >
+          <div className="font-medium text-ink">{drag.title}</div>
+          {drag.targetDayKey && (
+            <div className="text-[11px] text-ember">
+              → {format(dateFromKeyMinutes(drag.targetDayKey, drag.targetMin), "EEE MMM d, h:mm a")}
+            </div>
+          )}
         </div>
       )}
     </div>

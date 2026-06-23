@@ -3,7 +3,10 @@ import { format } from "date-fns";
 import { useStore } from "../store/useStore";
 import Modal, { Field, inputCls } from "./Modal";
 import { WEEKDAY_LABELS } from "../lib/defaults";
-import type { DeadlineType, Priority, Task, Weekday } from "../lib/types";
+import type { DeadlineType, Priority, SubTask, Task, Weekday } from "../lib/types";
+
+const uid = () =>
+  typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `s-${Date.now()}-${Math.random()}`;
 
 const toLocalInput = (iso?: string | null) =>
   iso ? format(new Date(iso), "yyyy-MM-dd'T'HH:mm") : "";
@@ -33,6 +36,7 @@ export default function TaskPanel() {
   const [minChunk, setMinChunk] = useState(existing?.min_chunk_minutes ?? defaultChunk);
   const [recurDays, setRecurDays] = useState<Weekday[]>(existing?.recurrence?.days ?? []);
   const [pinnedStart, setPinnedStart] = useState<string | null>(existing?.pinned_start ?? null);
+  const [subtasks, setSubtasks] = useState<SubTask[]>(existing?.subtasks ?? []);
 
   const dueDisabled = priority === "asap" || deadlineType === "none";
 
@@ -53,6 +57,7 @@ export default function TaskPanel() {
       status: existing?.status ?? "todo",
       completed_at: existing?.completed_at ?? null,
       pinned_start: pinnedStart, // preserve manual pin; cleared via Unpin
+      subtasks: subtasks.length ? subtasks.map((s) => ({ ...s, title: s.title.trim() })).filter((s) => s.title) : null,
     };
     if (isEdit && existing?.id) await updateTask(existing.id, payload);
     else await createTask(payload);
@@ -249,6 +254,53 @@ export default function TaskPanel() {
           ))}
         </div>
       </Field>
+
+      <div className="mb-3">
+        <div className="mb-1 flex items-center justify-between">
+          <span className="text-[12px] font-medium text-ink-soft">Steps (sub-tasks)</span>
+          {subtasks.length > 0 && (
+            <span className="text-[11px] text-ink-faint">
+              {subtasks.filter((s) => s.done).length}/{subtasks.length} done
+            </span>
+          )}
+        </div>
+        <div className="space-y-1.5">
+          {subtasks.map((s, i) => (
+            <div key={s.id} className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={s.done}
+                onChange={(e) =>
+                  setSubtasks((cur) => cur.map((x) => (x.id === s.id ? { ...x, done: e.target.checked } : x)))
+                }
+                className="h-4 w-4 shrink-0 accent-pine"
+                aria-label={`Step ${i + 1} done`}
+              />
+              <input
+                value={s.title}
+                onChange={(e) =>
+                  setSubtasks((cur) => cur.map((x) => (x.id === s.id ? { ...x, title: e.target.value } : x)))
+                }
+                placeholder={`Step ${i + 1}`}
+                className={`${inputCls} ${s.done ? "text-ink-faint line-through" : ""}`}
+              />
+              <button
+                onClick={() => setSubtasks((cur) => cur.filter((x) => x.id !== s.id))}
+                className="shrink-0 rounded-md border border-ground-line px-2 py-1.5 text-[12px] text-ink-faint hover:text-ember"
+                aria-label="Remove step"
+              >
+                ✕
+              </button>
+            </div>
+          ))}
+        </div>
+        <button
+          onClick={() => setSubtasks((cur) => [...cur, { id: uid(), title: "", done: false }])}
+          className="mt-1.5 rounded-lg border border-ground-line px-3 py-1.5 text-[12px] text-ink-soft hover:text-ink"
+        >
+          + Add step
+        </button>
+      </div>
 
       <Field label="Notes (optional)">
         <textarea

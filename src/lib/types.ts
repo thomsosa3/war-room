@@ -33,6 +33,13 @@ export interface Recurrence {
   days: Weekday[];
 }
 
+/** A checklist step under a task (MAIN TASK -> sub-steps). */
+export interface SubTask {
+  id: string;
+  title: string;
+  done: boolean;
+}
+
 export interface Task {
   id: string;
   title: string;
@@ -53,6 +60,8 @@ export interface Task {
    * flows auto-scheduled tasks around it. Null = fully auto-scheduled.
    */
   pinned_start?: string | null;
+  /** Checklist of steps to complete the task. Does not affect scheduling. */
+  subtasks?: SubTask[] | null;
   assignee_id?: string | null; // null = shared backlog
   status: TaskStatus;
   created_at: string;

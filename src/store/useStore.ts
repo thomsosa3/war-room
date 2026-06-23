@@ -3,7 +3,7 @@ import { db } from "../lib/db";
 import { SHARED_PASSPHRASE } from "../lib/supabase";
 import type { FixedEvent, Member, Settings, Task } from "../lib/types";
 
-export type ViewKind = "day" | "week" | "agenda";
+export type ViewKind = "day" | "week" | "month" | "agenda";
 /** "me" = this device's member, "other" = the other one. */
 export type Focus = "me" | "other" | "both";
 

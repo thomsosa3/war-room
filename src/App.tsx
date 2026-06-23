@@ -7,6 +7,7 @@ import Header from "./components/Header";
 import WarRoomStatus from "./components/WarRoomStatus";
 import DayView from "./components/DayView";
 import WeekView from "./components/WeekView";
+import MonthView from "./components/MonthView";
 import AgendaView from "./components/AgendaView";
 import TaskPanel from "./components/TaskPanel";
 import FixedEventForm from "./components/FixedEventForm";
@@ -41,6 +42,7 @@ export default function App() {
       <main className="min-h-0 flex-1 overflow-hidden">
         {view === "day" && <DayView />}
         {view === "week" && <WeekView />}
+        {view === "month" && <MonthView />}
         {view === "agenda" && <AgendaView />}
       </main>
 
