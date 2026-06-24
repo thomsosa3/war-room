@@ -11,7 +11,7 @@ import {
 import { useStore } from "../store/useStore";
 import { usePlanner } from "../store/usePlanner";
 import { resolveManualBlocks } from "../lib/manual";
-import { taskColor } from "../lib/ui";
+import { projectTag, taskColor } from "../lib/ui";
 import { getDrag, setDrag } from "./planner/dragState";
 
 interface Chip {
@@ -21,6 +21,7 @@ interface Chip {
   startMin: number;
   color: string;
   starred: boolean;
+  tag: { letter: string; color: string } | null;
 }
 
 export default function MonthView() {
@@ -51,8 +52,9 @@ export default function MonthView() {
       blockId: b.manualBlockId,
       title: task.title,
       startMin: start.getHours() * 60 + start.getMinutes(),
-      color: taskColor(task, projectMap),
+      color: taskColor(task),
       starred: !!task.starred,
+      tag: projectTag(task, projectMap),
     });
     chipsByDay.set(key, list);
   }
@@ -135,7 +137,8 @@ export default function MonthView() {
                     style={{ background: `${c.color}22`, borderLeft: `2px solid ${c.color}` }}
                   >
                     {c.starred && <span className="text-[9px] text-ember">★</span>}
-                    <span className="truncate text-ink">{c.title}</span>
+                    <span className="flex-1 truncate text-ink">{c.title}</span>
+                    {c.tag && <span className="shrink-0 text-[10px] font-semibold" style={{ color: c.tag.color }}>{c.tag.letter}</span>}
                   </div>
                 ))}
                 {chips.length > shown.length && (

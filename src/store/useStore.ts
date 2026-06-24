@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { db } from "../lib/db";
 import { SHARED_PASSPHRASE } from "../lib/supabase";
 import { addBlock, duplicateBlock, moveBlock, removeBlock, resizeBlock } from "../lib/manual";
-import type { FixedEvent, Member, Project, Settings, Task } from "../lib/types";
+import type { FixedEvent, Member, Project, Settings, Task, TaskCategory } from "../lib/types";
 
 export type ViewKind = "day" | "week" | "month" | "agenda" | "projects";
 /** "me" = this device's member, "other" = the other one. */
@@ -74,7 +74,7 @@ interface State {
   deleteProject: (id: string) => Promise<void>;
 
   // planner block ops
-  quickAdd: (title: string, projectId?: string | null) => Promise<void>;
+  quickAdd: (title: string, projectId?: string | null, category?: TaskCategory | null) => Promise<void>;
   addTaskBlock: (taskId: string, startISO: string, minutes?: number) => Promise<void>;
   moveTaskBlock: (taskId: string, blockId: string, startISO: string) => Promise<void>;
   resizeTaskBlock: (taskId: string, blockId: string, minutes: number) => Promise<void>;
@@ -84,7 +84,11 @@ interface State {
   toggleStar: (taskId: string) => Promise<void>;
 }
 
-const blankTask = (title: string, projectId?: string | null): Omit<Task, "id" | "created_at"> => ({
+const blankTask = (
+  title: string,
+  projectId?: string | null,
+  category?: TaskCategory | null
+): Omit<Task, "id" | "created_at"> => ({
   title,
   notes: null,
   estimated_minutes: 60,
@@ -102,6 +106,8 @@ const blankTask = (title: string, projectId?: string | null): Omit<Task, "id" | 
   depends_on: null,
   needs_both: false,
   starred: false,
+  category: category ?? null,
+  materials: null,
   assignee_id: null,
   status: "todo",
   completed_at: null,
@@ -239,9 +245,9 @@ export const useStore = create<State>((set, get) => ({
     await get().refresh();
   },
 
-  quickAdd: async (title, projectId) => {
+  quickAdd: async (title, projectId, category) => {
     if (!title.trim()) return;
-    await db.createTask(blankTask(title.trim(), projectId));
+    await db.createTask(blankTask(title.trim(), projectId, category));
     await get().refresh();
   },
   addTaskBlock: async (taskId, startISO, minutes) => {

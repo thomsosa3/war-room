@@ -3,7 +3,8 @@ import { addDays } from "date-fns";
 import { useStore } from "../store/useStore";
 import Modal, { Field, inputCls } from "./Modal";
 import { blockUid, resolveManualBlocks } from "../lib/manual";
-import type { ManualBlock, SubTask, Task } from "../lib/types";
+import { CATEGORY_COLOR, CATEGORY_LABEL, CATEGORY_ORDER } from "../lib/ui";
+import type { ManualBlock, Material, SubTask, Task, TaskCategory } from "../lib/types";
 
 const uid = () =>
   typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `s-${Date.now()}-${Math.random()}`;
@@ -26,6 +27,8 @@ export default function TaskPanel() {
   const [starred, setStarred] = useState<boolean>(existing?.starred ?? false);
   const [blockCount, setBlockCount] = useState<number>(existingBlocks.length);
   const [subtasks, setSubtasks] = useState<SubTask[]>(existing?.subtasks ?? []);
+  const [category, setCategory] = useState<TaskCategory | "">(existing?.category ?? "");
+  const [materials, setMaterials] = useState<Material[]>(existing?.materials ?? []);
 
   // Build the manual_blocks array to match the requested count: keep existing,
   // add new ones on consecutive days (you reposition them by dragging).
@@ -61,6 +64,8 @@ export default function TaskPanel() {
       depends_on: null,
       needs_both: false,
       starred,
+      category: category || null,
+      materials: materials.length ? materials.map((m) => ({ ...m, name: m.name.trim() })).filter((m) => m.name) : null,
       assignee_id: null,
       status: existing?.status ?? "todo",
       completed_at: existing?.completed_at ?? null,
@@ -144,6 +149,66 @@ export default function TaskPanel() {
       <p className="-mt-1 mb-3 text-[11px] text-ink-faint">
         Blocks start on the calendar at 9am on coming days — drag them where you want, or just drag the task from the list.
       </p>
+
+      <Field label="Category">
+        <div className="flex gap-1.5">
+          {CATEGORY_ORDER.map((c) => (
+            <button
+              key={c}
+              onClick={() => setCategory((cur) => (cur === c ? "" : c))}
+              className={`flex-1 rounded-lg border-2 px-2 py-2 text-[12px] ${category === c ? "border-ink text-ink" : "border-ground-line text-ink-soft"}`}
+              style={{ background: `${CATEGORY_COLOR[c]}33` }}
+            >
+              <span className="mb-1 block h-2 w-full rounded-sm" style={{ background: CATEGORY_COLOR[c] }} />
+              {CATEGORY_LABEL[c]}
+            </button>
+          ))}
+        </div>
+      </Field>
+
+      <div className="mb-3 rounded-lg border border-ground-line bg-ground p-3">
+        <div className="mb-1.5 text-[12px] font-medium text-ink-soft">
+          Materials {materials.length > 0 ? `· ${materials.filter((m) => m.bought).length}/${materials.length} bought` : ""}
+        </div>
+        <div className="space-y-1.5">
+          {materials.map((m) => (
+            <div key={m.id} className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={m.bought}
+                onChange={(e) => setMaterials((cur) => cur.map((x) => (x.id === m.id ? { ...x, bought: e.target.checked } : x)))}
+                className="h-4 w-4 shrink-0 accent-pine"
+                title="Bought"
+              />
+              <input
+                value={m.name}
+                onChange={(e) => setMaterials((cur) => cur.map((x) => (x.id === m.id ? { ...x, name: e.target.value } : x)))}
+                placeholder="Material"
+                className={`${inputCls} flex-1 ${m.bought ? "text-ink-faint line-through" : ""}`}
+              />
+              <input
+                value={m.qty ?? ""}
+                onChange={(e) => setMaterials((cur) => cur.map((x) => (x.id === m.id ? { ...x, qty: e.target.value } : x)))}
+                placeholder="qty"
+                className={`${inputCls} w-16`}
+              />
+              <button
+                onClick={() => setMaterials((cur) => cur.filter((x) => x.id !== m.id))}
+                className="shrink-0 rounded-md border border-ground-line px-2 py-1.5 text-[12px] text-ink-faint hover:text-ember"
+                aria-label="Remove material"
+              >
+                ✕
+              </button>
+            </div>
+          ))}
+        </div>
+        <button
+          onClick={() => setMaterials((cur) => [...cur, { id: uid(), name: "", qty: "", bought: false }])}
+          className="mt-1.5 rounded-lg border border-ground-line px-3 py-1.5 text-[12px] text-ink-soft hover:text-ink"
+        >
+          + Add material
+        </button>
+      </div>
 
       <div className="mb-3">
         <div className="mb-1 flex items-center justify-between">

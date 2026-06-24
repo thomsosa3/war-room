@@ -5,6 +5,7 @@
 export type Priority = "asap" | "high" | "medium" | "low";
 export type DeadlineType = "hard" | "soft" | "none";
 export type TaskStatus = "todo" | "done";
+export type TaskCategory = "woodworking" | "stoneworking" | "planting" | "landscaping";
 export type FixedEventType = "class" | "work" | "gym" | "other";
 
 /** 0 = Sunday ... 6 = Saturday (matches JS Date.getDay()). */
@@ -101,6 +102,10 @@ export interface Task {
   needs_both?: boolean | null;
   /** Favourited — glows with a star in the planner. */
   starred?: boolean | null;
+  /** Work type — drives the block colour. Null = uncategorized (slate). */
+  category?: TaskCategory | null;
+  /** Materials needed for this task; pool into the project shopping list. */
+  materials?: Material[] | null;
   assignee_id?: string | null; // null = shared backlog
   status: TaskStatus;
   created_at: string;

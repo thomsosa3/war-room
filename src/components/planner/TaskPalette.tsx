@@ -2,13 +2,14 @@ import { useState } from "react";
 import { format } from "date-fns";
 import { useStore } from "../../store/useStore";
 import { usePlanner } from "../../store/usePlanner";
-import { taskColor } from "../../lib/ui";
-import type { Task } from "../../lib/types";
+import { CATEGORY_COLOR, CATEGORY_ORDER, projectTag, taskColor } from "../../lib/ui";
+import type { Task, TaskCategory } from "../../lib/types";
 import { setDrag } from "./dragState";
 import { DEFAULT_BLOCK_MIN } from "../../lib/manual";
+import MaterialsPopover from "./MaterialsPopover";
 
 export default function TaskPalette() {
-  const { unassigned, planned, completed, projectMap } = usePlanner();
+  const { unassigned, planned, completed, projectMap, taskMap } = usePlanner();
   const projects = useStore((s) => s.projects);
   const projectFilter = useStore((s) => s.projectFilter);
   const quickAdd = useStore((s) => s.quickAdd);
@@ -20,6 +21,8 @@ export default function TaskPalette() {
 
   const [title, setTitle] = useState("");
   const [qProject, setQProject] = useState<string | "">(projectFilter === "all" ? "" : projectFilter);
+  const [qCat, setQCat] = useState<TaskCategory | "">("");
+  const [hoverMat, setHoverMat] = useState<{ rect: DOMRect; taskId: string } | null>(null);
 
   const inFilter = (t: Task) => projectFilter === "all" || t.project_id === projectFilter;
   const un = unassigned.filter(inFilter);
@@ -28,11 +31,14 @@ export default function TaskPalette() {
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    await quickAdd(title, qProject || null);
+    await quickAdd(title, qProject || null, qCat || null);
     setTitle("");
   };
 
-  const Item = ({ t, draggable = true, unplan = false }: { t: Task; draggable?: boolean; unplan?: boolean }) => (
+  const Item = ({ t, draggable = true, unplan = false }: { t: Task; draggable?: boolean; unplan?: boolean }) => {
+    const tag = projectTag(t, projectMap);
+    const mats = t.materials ?? [];
+    return (
     <div
       draggable={draggable}
       onDragStart={(e) => {
@@ -42,15 +48,19 @@ export default function TaskPalette() {
         e.dataTransfer.setData("text/plain", t.title);
       }}
       onDragEnd={() => setDrag(null)}
+      onMouseEnter={(e) => mats.length && setHoverMat({ rect: e.currentTarget.getBoundingClientRect(), taskId: t.id })}
+      onMouseLeave={() => setHoverMat(null)}
       className={`group flex items-center gap-2 rounded-lg border border-ground-line bg-ground-raised px-2.5 py-2 text-sm ${
         draggable ? "cursor-grab active:cursor-grabbing hover:border-pine/60" : ""
       }`}
       style={{ boxShadow: t.starred ? "0 0 0 1px rgba(224,145,63,0.6)" : undefined }}
     >
-      <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: taskColor(t, projectMap) }} />
+      <span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ background: taskColor(t) }} />
       <button onClick={() => openEditor({ kind: "task", task: t })} className="flex-1 truncate text-left">
         <span className={t.status === "done" ? "text-ink-faint line-through" : "text-ink"}>{t.title}</span>
       </button>
+      {mats.length > 0 && <span className="shrink-0 text-[11px] text-ink-faint" title="Has materials">▤</span>}
+      {tag && <span className="shrink-0 text-[12px] font-semibold" style={{ color: tag.color }}>{tag.letter}</span>}
       {t.status !== "done" ? (
         <>
           {unplan && (
@@ -91,7 +101,8 @@ export default function TaskPalette() {
         </>
       )}
     </div>
-  );
+    );
+  };
 
   const Section = ({ label, items, draggable = true, unplan = false }: { label: string; items: Task[]; draggable?: boolean; unplan?: boolean }) => (
     <div className="mb-4">
@@ -135,6 +146,18 @@ export default function TaskPalette() {
             ))}
           </select>
         )}
+        <div className="mt-2 flex items-center gap-1.5">
+          {CATEGORY_ORDER.map((c) => (
+            <button
+              key={c}
+              type="button"
+              onClick={() => setQCat((cur) => (cur === c ? "" : c))}
+              title={c}
+              className={`h-6 flex-1 rounded-md border-2 ${qCat === c ? "border-ink" : "border-transparent"}`}
+              style={{ background: CATEGORY_COLOR[c] }}
+            />
+          ))}
+        </div>
         <button
           type="submit"
           disabled={!title.trim()}
@@ -148,6 +171,9 @@ export default function TaskPalette() {
         <Section label="Planned" items={pl} unplan />
         <Section label="Completed" items={done} draggable={false} />
       </div>
+      {hoverMat && (taskMap[hoverMat.taskId]?.materials?.length ?? 0) > 0 && (
+        <MaterialsPopover rect={hoverMat.rect} materials={taskMap[hoverMat.taskId]!.materials!} />
+      )}
     </div>
   );
 }

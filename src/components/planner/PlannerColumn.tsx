@@ -2,9 +2,10 @@ import { useEffect, useReducer, useRef, useState } from "react";
 import { isSameDay } from "date-fns";
 import type { Project, ScheduledBlock, Task } from "../../lib/types";
 import { blocksOnDay } from "../../lib/occurrences";
-import { fmtRange, taskColor, tint } from "../../lib/ui";
+import { fmtRange, projectTag, taskColor, tint } from "../../lib/ui";
 import { useStore } from "../../store/useStore";
 import { getDrag, setDrag, SNAP_MIN } from "./dragState";
+import MaterialsPopover from "./MaterialsPopover";
 
 interface Props {
   day: Date;
@@ -68,6 +69,7 @@ export default function PlannerColumn({
   const [, force] = useReducer((n: number) => n + 1, 0);
   const [menu, setMenu] = useState<Menu | null>(null);
   const [dropY, setDropY] = useState<number | null>(null);
+  const [hoverMat, setHoverMat] = useState<{ rect: DOMRect; taskId: string } | null>(null);
 
   // hour range — fixed (week, shared with the gutter) or fit the day's blocks.
   let minH = rangeMin ?? 7;
@@ -183,7 +185,9 @@ export default function PlannerColumn({
         {dayBlocks.map((b, i) => {
           const task = taskMap[b.taskId];
           if (!task) return null;
-          const color = taskColor(task, projectMap);
+          const color = taskColor(task);
+          const tag = projectTag(task, projectMap);
+          const mats = task.materials ?? [];
           const s = new Date(b.start);
           const isResizing = resizeRef.current?.block.manualBlockId === b.manualBlockId;
           const minutes = isResizing
@@ -217,6 +221,8 @@ export default function PlannerColumn({
                 }
                 openEditor({ kind: "task", task });
               }}
+              onMouseEnter={(e) => mats.length && setHoverMat({ rect: e.currentTarget.getBoundingClientRect(), taskId: task.id })}
+              onMouseLeave={() => setHoverMat(null)}
               onContextMenu={(e) => {
                 e.preventDefault();
                 setMenu({ x: e.clientX, y: e.clientY, block: b, task });
@@ -233,13 +239,19 @@ export default function PlannerColumn({
               title={`${task.title} · ${fmtRange(b.start, new Date(s.getTime() + minutes * 60000).toISOString())}`}
             >
               <div className="flex items-center gap-1">
-                <span className="truncate text-[12px] font-medium text-ink">{task.title}</span>
+                <span className="flex-1 truncate text-[12px] font-medium text-ink">{task.title}</span>
+                {mats.length > 0 && <span className="shrink-0 text-[10px] text-ink-faint">▤</span>}
                 {b.isPartialOf && (
-                  <span className="ml-auto shrink-0 text-[10px] text-ink-faint">
+                  <span className="shrink-0 text-[10px] text-ink-faint">
                     {b.isPartialOf.chunkIndex + 1}/{b.isPartialOf.chunkCount}
                   </span>
                 )}
-                {task.starred && <span className="ml-auto shrink-0 text-[10px] text-ember">★</span>}
+                {task.starred && <span className="shrink-0 text-[10px] text-ember">★</span>}
+                {tag && (
+                  <span className="shrink-0 text-[11px] font-semibold" style={{ color: tag.color }}>
+                    {tag.letter}
+                  </span>
+                )}
               </div>
               {!compact && height > 32 && (
                 <div className="truncate text-[11px] text-ink-soft">
@@ -276,6 +288,10 @@ export default function PlannerColumn({
             <div className="border-t border-ember" />
           </div>
         </div>
+      )}
+
+      {hoverMat && (taskMap[hoverMat.taskId]?.materials?.length ?? 0) > 0 && (
+        <MaterialsPopover rect={hoverMat.rect} materials={taskMap[hoverMat.taskId]!.materials!} />
       )}
 
       {menu && (

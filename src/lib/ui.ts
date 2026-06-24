@@ -1,5 +1,32 @@
 import { format } from "date-fns";
-import type { FixedEventType, Priority, Project, Task } from "./types";
+import type { FixedEventType, Priority, Project, Task, TaskCategory } from "./types";
+
+// Work-type categories drive the calendar block colour.
+export const CATEGORY_COLOR: Record<TaskCategory, string> = {
+  woodworking: "#8a5a3c", // deep brown
+  stoneworking: "#b9bec6", // light grey
+  planting: "#5fb074", // green
+  landscaping: "#d4b441", // yellow
+};
+export const CATEGORY_LABEL: Record<TaskCategory, string> = {
+  woodworking: "Woodworking",
+  stoneworking: "Stoneworking",
+  planting: "Planting",
+  landscaping: "Landscaping",
+};
+export const CATEGORY_ORDER: TaskCategory[] = ["woodworking", "stoneworking", "planting", "landscaping"];
+export const UNCATEGORIZED_COLOR = "#5b6573"; // slate grey
+
+/** A small property tag (V / B) coloured by the task's project. */
+export function projectTag(
+  task: Task,
+  projectMap: Record<string, Project>
+): { letter: string; color: string } | null {
+  if (!task.project_id) return null;
+  const p = projectMap[task.project_id];
+  if (!p) return null;
+  return { letter: p.name.charAt(0).toUpperCase(), color: p.color };
+}
 
 // Priority colors for scheduled task blocks.
 export const PRIORITY_COLOR: Record<Priority, string> = {
@@ -40,10 +67,9 @@ export function fmtDuration(minutes: number): string {
   return `${m}m`;
 }
 
-/** A task's display color: its project's color if it has one, else priority. */
-export function taskColor(task: Task, projectMap: Record<string, Project>): string {
-  if (task.project_id && projectMap[task.project_id]) return projectMap[task.project_id].color;
-  return PRIORITY_COLOR[task.priority];
+/** A task's block color: its work-category color, or slate grey if uncategorized. */
+export function taskColor(task: Task): string {
+  return task.category ? CATEGORY_COLOR[task.category] : UNCATEGORIZED_COLOR;
 }
 
 export interface ProjectProgress {

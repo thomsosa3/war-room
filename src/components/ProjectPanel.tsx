@@ -8,7 +8,7 @@ const uid = () =>
   typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `m-${Date.now()}-${Math.random()}`;
 const toDateInput = (iso?: string | null) => (iso ? format(new Date(iso), "yyyy-MM-dd") : "");
 
-const PALETTE = ["#4f8a6b", "#7c6cd6", "#c97a2c", "#4a6d80", "#9d5c63", "#5b7089", "#6d8a44"];
+const PALETTE = ["#e0913f", "#5b9bd5", "#4f8a6b", "#7c6cd6", "#c97a2c", "#9d5c63", "#6d8a44"];
 
 export default function ProjectPanel() {
   const editing = useStore((s) => s.editing);
