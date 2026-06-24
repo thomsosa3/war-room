@@ -99,6 +99,8 @@ export interface Task {
   depends_on?: string[] | null;
   /** True = job needs both members; scheduled into their shared free time. */
   needs_both?: boolean | null;
+  /** Favourited — glows with a star in the planner. */
+  starred?: boolean | null;
   assignee_id?: string | null; // null = shared backlog
   status: TaskStatus;
   created_at: string;

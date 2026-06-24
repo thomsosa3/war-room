@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { db } from "../lib/db";
 import { SHARED_PASSPHRASE } from "../lib/supabase";
+import { addBlock, duplicateBlock, moveBlock, removeBlock, resizeBlock } from "../lib/manual";
 import type { FixedEvent, Member, Project, Settings, Task } from "../lib/types";
 
 export type ViewKind = "day" | "week" | "month" | "agenda" | "projects";
@@ -71,7 +72,39 @@ interface State {
   createProject: (p: Omit<Project, "id" | "created_at">) => Promise<void>;
   updateProject: (id: string, patch: Partial<Project>) => Promise<void>;
   deleteProject: (id: string) => Promise<void>;
+
+  // planner block ops
+  quickAdd: (title: string, projectId?: string | null) => Promise<void>;
+  addTaskBlock: (taskId: string, startISO: string, minutes?: number) => Promise<void>;
+  moveTaskBlock: (taskId: string, blockId: string, startISO: string) => Promise<void>;
+  resizeTaskBlock: (taskId: string, blockId: string, minutes: number) => Promise<void>;
+  removeTaskBlock: (taskId: string, blockId: string) => Promise<void>;
+  duplicateTaskBlock: (taskId: string, blockId: string) => Promise<void>;
+  toggleStar: (taskId: string) => Promise<void>;
 }
+
+const blankTask = (title: string, projectId?: string | null): Omit<Task, "id" | "created_at"> => ({
+  title,
+  notes: null,
+  estimated_minutes: 60,
+  priority: "medium",
+  deadline_type: "none",
+  due_date: null,
+  earliest_start: null,
+  splittable: true,
+  min_chunk_minutes: 30,
+  recurrence: null,
+  pinned_start: null,
+  manual_blocks: null,
+  subtasks: null,
+  project_id: projectId ?? null,
+  depends_on: null,
+  needs_both: false,
+  starred: false,
+  assignee_id: null,
+  status: "todo",
+  completed_at: null,
+});
 
 const emptySettings: Settings = {
   id: "",
@@ -202,6 +235,48 @@ export const useStore = create<State>((set, get) => ({
   },
   deleteProject: async (id) => {
     await db.deleteProject(id);
+    await get().refresh();
+  },
+
+  quickAdd: async (title, projectId) => {
+    if (!title.trim()) return;
+    await db.createTask(blankTask(title.trim(), projectId));
+    await get().refresh();
+  },
+  addTaskBlock: async (taskId, startISO, minutes) => {
+    const t = get().tasks.find((x) => x.id === taskId);
+    if (!t) return;
+    await db.updateTask(taskId, { manual_blocks: addBlock(t, startISO, minutes), pinned_start: null });
+    await get().refresh();
+  },
+  moveTaskBlock: async (taskId, blockId, startISO) => {
+    const t = get().tasks.find((x) => x.id === taskId);
+    if (!t) return;
+    await db.updateTask(taskId, { manual_blocks: moveBlock(t, blockId, startISO), pinned_start: null });
+    await get().refresh();
+  },
+  resizeTaskBlock: async (taskId, blockId, minutes) => {
+    const t = get().tasks.find((x) => x.id === taskId);
+    if (!t) return;
+    await db.updateTask(taskId, { manual_blocks: resizeBlock(t, blockId, minutes), pinned_start: null });
+    await get().refresh();
+  },
+  removeTaskBlock: async (taskId, blockId) => {
+    const t = get().tasks.find((x) => x.id === taskId);
+    if (!t) return;
+    await db.updateTask(taskId, { manual_blocks: removeBlock(t, blockId), pinned_start: null });
+    await get().refresh();
+  },
+  duplicateTaskBlock: async (taskId, blockId) => {
+    const t = get().tasks.find((x) => x.id === taskId);
+    if (!t) return;
+    await db.updateTask(taskId, { manual_blocks: duplicateBlock(t, blockId), pinned_start: null });
+    await get().refresh();
+  },
+  toggleStar: async (taskId) => {
+    const t = get().tasks.find((x) => x.id === taskId);
+    if (!t) return;
+    await db.updateTask(taskId, { starred: !t.starred });
     await get().refresh();
   },
 }));

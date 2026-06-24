@@ -89,8 +89,9 @@ create table if not exists tasks (
   manual_blocks jsonb,      -- manual placements: [{id,start,minutes}] (several per task)
   subtasks jsonb,           -- checklist of steps: [{id,title,done}]
   project_id uuid,          -- project this task belongs to (FK added after projects table)
-  depends_on jsonb,         -- task ids that must finish first (build order)
-  needs_both boolean not null default false, -- two-person job (shared time)
+  depends_on jsonb,         -- (legacy) task ids that must finish first
+  needs_both boolean not null default false, -- (legacy) two-person job
+  starred boolean not null default false,    -- favourite (glows in the planner)
   assignee_id uuid references members(id) on delete set null,
   status text not null default 'todo' check (status in ('todo','done')),
   created_at timestamptz not null default now(),

@@ -4,16 +4,11 @@ import { isSupabaseConfigured } from "./lib/supabase";
 import PassphraseGate from "./components/PassphraseGate";
 import UpdateNotifier from "./components/UpdateNotifier";
 import Header from "./components/Header";
-import WarRoomStatus from "./components/WarRoomStatus";
-import DayView from "./components/DayView";
-import WeekView from "./components/WeekView";
+import PlannerView from "./components/planner/PlannerView";
 import MonthView from "./components/MonthView";
-import AgendaView from "./components/AgendaView";
 import ProjectsView from "./components/ProjectsView";
 import TaskPanel from "./components/TaskPanel";
-import FixedEventForm from "./components/FixedEventForm";
 import ProjectPanel from "./components/ProjectPanel";
-import SettingsPanel from "./components/SettingsPanel";
 
 export default function App() {
   const unlocked = useStore((s) => s.unlocked);
@@ -40,19 +35,14 @@ export default function App() {
     <div className="flex h-full flex-col bg-ground text-ink">
       <UpdateNotifier />
       <Header />
-      <WarRoomStatus />
       <main className="min-h-0 flex-1 overflow-hidden">
-        {view === "day" && <DayView />}
-        {view === "week" && <WeekView />}
+        {(view === "day" || view === "week") && <PlannerView />}
         {view === "month" && <MonthView />}
-        {view === "agenda" && <AgendaView />}
         {view === "projects" && <ProjectsView />}
       </main>
 
       {editing?.kind === "task" && <TaskPanel />}
-      {editing?.kind === "event" && <FixedEventForm />}
       {editing?.kind === "project" && <ProjectPanel />}
-      {editing?.kind === "settings" && <SettingsPanel />}
     </div>
   );
 }

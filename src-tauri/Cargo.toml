@@ -1,6 +1,6 @@
 [package]
 name = "war-room"
-version = "0.5.0"
+version = "0.6.0"
 description = "Shared auto-scheduling war room"
 authors = ["you"]
 edition = "2021"
