@@ -47,6 +47,7 @@ export default function PlannerColumn({
   const removeTaskBlock = useStore((s) => s.removeTaskBlock);
   const toggleStar = useStore((s) => s.toggleStar);
   const toggleDone = useStore((s) => s.toggleDone);
+  const unplanTask = useStore((s) => s.unplanTask);
 
   const innerRef = useRef<HTMLDivElement>(null);
   const dayBlocks = blocksOnDay(blocks, day);
@@ -286,6 +287,7 @@ export default function PlannerColumn({
             addBlock: () => duplicateTaskBlock(menu.block.taskId, menu.block.manualBlockId!),
             markDone: () => toggleDone(menu.task),
             del: () => removeTaskBlock(menu.block.taskId, menu.block.manualBlockId!),
+            unplan: () => unplanTask(menu.block.taskId),
             star: () => toggleStar(menu.task.id),
           }}
           starred={!!menu.task.starred}
@@ -303,7 +305,7 @@ function ContextMenu({
 }: {
   menu: Menu;
   onClose: () => void;
-  actions: { edit: () => void; addBlock: () => void; markDone: () => void; del: () => void; star: () => void };
+  actions: { edit: () => void; addBlock: () => void; markDone: () => void; del: () => void; unplan: () => void; star: () => void };
   starred: boolean;
 }) {
   useEffect(() => {
@@ -339,6 +341,7 @@ function ContextMenu({
       {item("Mark done", actions.markDone)}
       {item("Edit task…", actions.edit)}
       <div className="my-1 border-t border-ground-line" />
+      {item("↩ Unplan (back to list)", actions.unplan)}
       {item("Delete this block", actions.del)}
     </div>
   );

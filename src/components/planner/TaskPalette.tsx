@@ -15,6 +15,7 @@ export default function TaskPalette() {
   const toggleStar = useStore((s) => s.toggleStar);
   const toggleDone = useStore((s) => s.toggleDone);
   const deleteTask = useStore((s) => s.deleteTask);
+  const unplanTask = useStore((s) => s.unplanTask);
   const openEditor = useStore((s) => s.openEditor);
 
   const [title, setTitle] = useState("");
@@ -31,7 +32,7 @@ export default function TaskPalette() {
     setTitle("");
   };
 
-  const Item = ({ t, draggable = true }: { t: Task; draggable?: boolean }) => (
+  const Item = ({ t, draggable = true, unplan = false }: { t: Task; draggable?: boolean; unplan?: boolean }) => (
     <div
       draggable={draggable}
       onDragStart={(e) => {
@@ -52,6 +53,15 @@ export default function TaskPalette() {
       </button>
       {t.status !== "done" ? (
         <>
+          {unplan && (
+            <button
+              onClick={() => unplanTask(t.id)}
+              className="shrink-0 text-ink-faint opacity-0 hover:text-ink group-hover:opacity-100"
+              title="Unplan — remove from calendar, keep the task"
+            >
+              ↩
+            </button>
+          )}
           <button
             onClick={() => toggleStar(t.id)}
             className={`shrink-0 text-sm ${t.starred ? "text-ember" : "text-ink-faint opacity-0 group-hover:opacity-100"}`}
@@ -83,7 +93,7 @@ export default function TaskPalette() {
     </div>
   );
 
-  const Section = ({ label, items, draggable = true }: { label: string; items: Task[]; draggable?: boolean }) => (
+  const Section = ({ label, items, draggable = true, unplan = false }: { label: string; items: Task[]; draggable?: boolean; unplan?: boolean }) => (
     <div className="mb-4">
       <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-faint">
         {label} · {items.length}
@@ -95,7 +105,7 @@ export default function TaskPalette() {
       ) : (
         <div className="space-y-1.5">
           {items.map((t) => (
-            <Item key={t.id} t={t} draggable={draggable} />
+            <Item key={t.id} t={t} draggable={draggable} unplan={unplan} />
           ))}
         </div>
       )}
@@ -135,7 +145,7 @@ export default function TaskPalette() {
       </form>
       <div className="min-h-0 flex-1 overflow-y-auto p-3">
         <Section label="Unassigned" items={un} />
-        <Section label="Planned" items={pl} />
+        <Section label="Planned" items={pl} unplan />
         <Section label="Completed" items={done} draggable={false} />
       </div>
     </div>

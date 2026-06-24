@@ -80,6 +80,7 @@ interface State {
   resizeTaskBlock: (taskId: string, blockId: string, minutes: number) => Promise<void>;
   removeTaskBlock: (taskId: string, blockId: string) => Promise<void>;
   duplicateTaskBlock: (taskId: string, blockId: string) => Promise<void>;
+  unplanTask: (taskId: string) => Promise<void>;
   toggleStar: (taskId: string) => Promise<void>;
 }
 
@@ -271,6 +272,11 @@ export const useStore = create<State>((set, get) => ({
     const t = get().tasks.find((x) => x.id === taskId);
     if (!t) return;
     await db.updateTask(taskId, { manual_blocks: duplicateBlock(t, blockId), pinned_start: null });
+    await get().refresh();
+  },
+  unplanTask: async (taskId) => {
+    // Remove all calendar blocks but keep the task — it returns to Unassigned.
+    await db.updateTask(taskId, { manual_blocks: null, pinned_start: null });
     await get().refresh();
   },
   toggleStar: async (taskId) => {
