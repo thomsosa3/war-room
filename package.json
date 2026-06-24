@@ -1,7 +1,7 @@
 {
   "name": "war-room",
   "private": true,
-  "version": "0.6.0",
+  "version": "0.6.1",
   "type": "module",
   "description": "Shared auto-scheduling war room — a Motion-style desktop app for two people.",
   "scripts": {

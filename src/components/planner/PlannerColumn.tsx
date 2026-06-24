@@ -13,6 +13,9 @@ interface Props {
   projectMap: Record<string, Project>;
   pxPerHour?: number;
   compact?: boolean;
+  /** Fixed hour range (so week columns share one scale with the time gutter). */
+  rangeMin?: number;
+  rangeMax?: number;
 }
 
 interface Menu {
@@ -33,6 +36,8 @@ export default function PlannerColumn({
   projectMap,
   pxPerHour = 56,
   compact = false,
+  rangeMin,
+  rangeMax,
 }: Props) {
   const openEditor = useStore((s) => s.openEditor);
   const addTaskBlock = useStore((s) => s.addTaskBlock);
@@ -55,16 +60,22 @@ export default function PlannerColumn({
 
   // resize state (pointer)
   const resizeRef = useRef<{ block: ScheduledBlock; startY: number; startMin: number; minutes: number } | null>(null);
+  // While resizing the bottom edge we must stop the block's HTML5 move-drag and
+  // the trailing click that would otherwise open the editor.
+  const suppressDrag = useRef(false);
+  const didResize = useRef(false);
   const [, force] = useReducer((n: number) => n + 1, 0);
   const [menu, setMenu] = useState<Menu | null>(null);
   const [dropY, setDropY] = useState<number | null>(null);
 
-  // hour range — fit the day's blocks, default 7..21
-  let minH = 7;
-  let maxH = 21;
-  for (const b of dayBlocks) {
-    minH = Math.min(minH, new Date(b.start).getHours());
-    maxH = Math.max(maxH, new Date(b.end).getHours() + 1);
+  // hour range — fixed (week, shared with the gutter) or fit the day's blocks.
+  let minH = rangeMin ?? 7;
+  let maxH = rangeMax ?? 21;
+  if (rangeMin == null && rangeMax == null) {
+    for (const b of dayBlocks) {
+      minH = Math.min(minH, new Date(b.start).getHours());
+      maxH = Math.max(maxH, new Date(b.end).getHours() + 1);
+    }
   }
   minH = Math.max(0, minH);
   maxH = Math.min(24, Math.max(maxH, minH + 1));
@@ -112,6 +123,7 @@ export default function PlannerColumn({
   const onResizeDown = (e: React.PointerEvent, block: ScheduledBlock) => {
     e.stopPropagation();
     e.preventDefault();
+    suppressDrag.current = true; // block onDragStart will bail while we resize
     const mins = (new Date(block.end).getTime() - new Date(block.start).getTime()) / 60000;
     resizeRef.current = { block, startY: e.clientY, startMin: mins, minutes: mins };
     try {
@@ -130,9 +142,16 @@ export default function PlannerColumn({
   };
   const onResizeUp = () => {
     const r = resizeRef.current;
-    if (!r) return;
-    resizeTaskBlock(r.block.taskId, r.block.manualBlockId!, r.minutes);
+    if (!r) {
+      suppressDrag.current = false;
+      return;
+    }
+    if (Math.round(r.minutes) !== Math.round(r.startMin)) {
+      didResize.current = true; // swallow the trailing click so the editor stays closed
+      resizeTaskBlock(r.block.taskId, r.block.manualBlockId!, r.minutes);
+    }
     resizeRef.current = null;
+    suppressDrag.current = false;
     force();
   };
 
@@ -175,6 +194,10 @@ export default function PlannerColumn({
               key={`${b.manualBlockId}-${i}`}
               draggable
               onDragStart={(e) => {
+                if (suppressDrag.current) {
+                  e.preventDefault(); // resizing — don't start a move-drag
+                  return;
+                }
                 const top = innerRef.current?.getBoundingClientRect().top ?? 0;
                 setDrag({
                   taskId: b.taskId,
@@ -186,7 +209,13 @@ export default function PlannerColumn({
                 e.dataTransfer.setData("text/plain", task.title);
               }}
               onDragEnd={() => setDrag(null)}
-              onClick={() => openEditor({ kind: "task", task })}
+              onClick={() => {
+                if (didResize.current) {
+                  didResize.current = false; // this click is the tail of a resize
+                  return;
+                }
+                openEditor({ kind: "task", task });
+              }}
               onContextMenu={(e) => {
                 e.preventDefault();
                 setMenu({ x: e.clientX, y: e.clientY, block: b, task });
@@ -221,12 +250,15 @@ export default function PlannerColumn({
                 onPointerDown={(e) => onResizeDown(e, b)}
                 onPointerMove={onResizeMove}
                 onPointerUp={onResizeUp}
+                onClick={(e) => e.stopPropagation()}
                 draggable={false}
                 onDragStart={(e) => e.preventDefault()}
-                className="absolute inset-x-0 bottom-0 h-2 cursor-ns-resize"
+                className="absolute inset-x-0 bottom-0 flex h-3 cursor-ns-resize items-end justify-center"
                 style={{ touchAction: "none" }}
                 title="Drag to resize"
-              />
+              >
+                <div className="mb-0.5 h-0.5 w-6 rounded-full bg-ink-faint/0 group-hover:bg-ink-faint/60" />
+              </div>
             </div>
           );
         })}

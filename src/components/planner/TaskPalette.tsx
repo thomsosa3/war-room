@@ -125,6 +125,13 @@ export default function TaskPalette() {
             ))}
           </select>
         )}
+        <button
+          type="submit"
+          disabled={!title.trim()}
+          className="mt-2 w-full rounded-lg bg-pine py-2 text-sm font-medium text-white transition hover:bg-pine-soft disabled:opacity-40"
+        >
+          Add task
+        </button>
       </form>
       <div className="min-h-0 flex-1 overflow-y-auto p-3">
         <Section label="Unassigned" items={un} />
